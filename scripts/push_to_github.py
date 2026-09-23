@@ -10,7 +10,7 @@ Requirements:
                     target repository (classic PAT: `repo` scope).
 
 Usage:
-    python scripts/push_to_github.py --owner lianwy11 --repo sts-autobot
+    python scripts/push_to_github.py --owner <your-username> --repo sts-autobot
     python scripts/push_to_github.py --owner me --repo sts-autobot --branch main --message "update docs"
 """
 

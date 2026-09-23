@@ -113,7 +113,7 @@ sts-autobot/
 创建 `%LOCALAPPDATA%\ModTheSpire\CommunicationMod\config.properties`（样例见 `config/`）：
 
 ```properties
-command=D\:\\Python311\\python.exe -X utf8 D\:\\path\\to\\driver.py
+command=<python.exe 完整路径> -X utf8 <sts-autobot\driver\driver.py 的完整路径>
 runAtGameStart=true
 verbose=true
 maxInitializationTimeout=30
