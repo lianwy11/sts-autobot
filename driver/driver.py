@@ -4,10 +4,6 @@
 import sys, json, os, io, time, glob
 from collections import deque
 
-# Path to the Slay the Spire install (adjust for your machine; the launcher
-# script and docs assume this default).
-GAME_DIR = os.environ.get("STS_GAME_DIR", r"D:\Steam\steamapps\common\SlayTheSpire")
-
 BASE = os.path.dirname(os.path.abspath(__file__))
 MANUAL = os.path.join(BASE, "manual_cmd.txt")
 MODE = os.path.join(BASE, "mode.txt")
@@ -238,8 +234,13 @@ POTION_CATALOG = {
 }
 
 def out(line):
-    sys.stdout.write(line.strip() + "\n")
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(line.strip() + "\n")
+        sys.stdout.flush()
+    except OSError:
+        # 游戏进程已消失（管道断裂）：驱动无事可做，干净退出
+        log("stdout closed (game process gone); driver exiting")
+        raise SystemExit(0)
 
 def log(msg):
     try:
@@ -992,6 +993,7 @@ class Ctx(object):
     card_reward_done = False
     potion_attempted = False
     floor = None
+    match_flips = 0      # "Match and Keep!" 事件翻牌计数
 
 def combat_reward_action(state, ctx):
     g = gs(state)
@@ -1046,12 +1048,21 @@ def pick_command(state, ctx):
                     mode = m
         except Exception:
             pass
-        has_save = bool(glob.glob(os.path.join(GAME_DIR, "saves", "*.autosave")))
+        has_save = bool(glob.glob(r"D:\Steam\steamapps\common\SlayTheSpire\saves\*.autosave"))
         if mode == "continue" and has_save and ctx.menu_seen <= 5:
             return RESUME_CLICK
         log("menu: START IRONCLAD (menu_seen=%d has_save=%s)" % (ctx.menu_seen, has_save))
         return "START IRONCLAD"
 
+    # 对对碰！(Match and Keep)：CommunicationMod 对该事件状态不完整，
+    # 逐张翻牌把事件推进完（按键位循环，尽量多配对）
+    if st == "EVENT" and "Match and Keep" in str(scr(state).get("event_id") or ""):
+        ch = choices(state)
+        if ch:
+            idx = ctx.match_flips % len(ch)
+            ctx.match_flips += 1
+            return "CHOOSE %d" % idx
+        return "KEY Cancel"
     if any(a.upper() == "CHOOSE" for a in avail_u):
         if st == "MAP":
             return map_action(state, avail_u)
@@ -1150,6 +1161,7 @@ def main():
             ctx.floor = fl
             ctx.card_reward_done = False
             ctx.potion_attempted = False
+            ctx.match_flips = 0
 
         if screen_type(state) == "NONE" and (gs(state).get("combat_state") or {}).get("monsters"):
             mons_dbg = ",".join("%s(%d/%d)" % (m.get("id") or "?", m.get("current_hp") or 0, m.get("max_hp") or 0)
