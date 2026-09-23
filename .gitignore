@@ -1,0 +1,20 @@
+# runtime artifacts (never commit these)
+*.log
+driver_log.txt
+last_state.json
+game_out.log
+game_err.log
+manual_cmd.txt
+mode.txt
+screen*.png
+
+# build output
+**/out/
+
+# jetbrains / vscode
+.idea/
+.vscode/
+
+# secrets: never commit tokens or local credentials
+.env
+*.token

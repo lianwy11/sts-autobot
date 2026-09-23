@@ -1,0 +1,9 @@
+{
+  "modid": "nofocuspause",
+  "name": "No Focus Pause",
+  "author_list": ["ZCode"],
+  "description": "Suppresses the automatic pause when the game window loses focus, so external drivers can play unattended.",
+  "version": "1.0.0",
+  "sts_version": "12-18-2022",
+  "mts_version": "3.30.0"
+}

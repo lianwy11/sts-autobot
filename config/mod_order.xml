@@ -1,0 +1,8 @@
+<!-- 放到 %LOCALAPPDATA%\ModTheSpire\mod_order.xml
+     决定 ModTheSpire 勾选哪些 Mod（GUI 启动路径使用；命令行 --mods 则直接指定 ID） -->
+<mts_cfg>
+	<mod>BaseMod.jar</mod>
+	<mod>CommunicationMod.jar</mod>
+	<mod>NoFocusPause.jar</mod>
+	<mod>AchievementEnabler.jar</mod>
+</mts_cfg>

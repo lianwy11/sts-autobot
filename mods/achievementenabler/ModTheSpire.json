@@ -1,0 +1,9 @@
+{
+  "modid": "achievementenabler",
+  "name": "Achievement Enabler",
+  "author_list": ["ZCode"],
+  "description": "Grants achievements during modded standard runs by suspending Settings.isModded around UnlockTracker.unlockAchievement. Daily/custom/seeded runs stay blocked.",
+  "version": "1.0.0",
+  "sts_version": "12-18-2022",
+  "mts_version": "3.30.0"
+}
