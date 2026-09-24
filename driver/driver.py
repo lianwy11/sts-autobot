@@ -42,7 +42,12 @@ def desired_character(ctx):
         log("class %s locked, falling back" % want)
     return random.choice(pool)
 
-RESUME_CLICK = "CLICK LEFT 240 660"
+RESUME_CLICK = "CLICK LEFT 205 631"
+# 主菜单"继续"按钮：实测桌面 (460,627)，窗口客户区原点 (323,206)、缩放 0.6667
+# （1280x720 窗口跑 1920x1080 逻辑分辨率）→ 逻辑坐标 (205,631)。
+# 旧值 (240,660) 会落在"放弃当前游戏"上，触发放弃确认框毁掉存档。
+# 对话框的"否"按钮：桌面 (1026,665) → 逻辑 (1054,688)
+DIALOG_NO_CLICK = "CLICK LEFT 1054 688"
 
 RAW_IN = sys.stdin.buffer
 try:
@@ -1377,6 +1382,7 @@ class Ctx(object):
     locked_classes = set()  # START 失败判定为锁定的职业
     last_start_class = None
     runs_started = 0     # ROTATE 轮换计数
+    start_sent = False   # 本次菜单会话只发一次 START
     stuck = 0            # 无指令可发的状态计数（过场/弹窗卡住）
 
 def combat_reward_action(state, ctx):
@@ -1434,9 +1440,14 @@ def pick_command(state, ctx):
             pass
         has_save = bool(glob.glob(r"D:\Steam\steamapps\common\SlayTheSpire\saves\*.autosave"))
         if mode == "continue" and has_save and ctx.menu_seen <= 40:
-            # the main menu needs ~2s to fade in; early clicks land on the
-            # animation, so keep clicking well past it before giving up
+            # Continue click needs the menu faded in; menu keeps STILL showing
+            # 'start' while the abandon dialog blocks it, so alternate with a
+            # 'No' click (harmless no-op when no dialog is up) to escape it
+            if ctx.menu_seen % 2 == 1:
+                return DIALOG_NO_CLICK
             return RESUME_CLICK
+        if ctx.start_sent:
+            return "WAIT 60"  # one START per menu session; game is catching up
         ctx.start_fail = 0  # a fresh menu resets the failure streak
         # a class may have been unlocked mid-session (e.g. Silent just beat
         # act 1): retry locked classes once every 8 runs
@@ -1446,6 +1457,7 @@ def pick_command(state, ctx):
         char = desired_character(ctx)
         ctx.last_start_class = char
         ctx.runs_started += 1
+        ctx.start_sent = True
         log("menu: START %s (menu_seen=%d has_save=%s run#%d)"
             % (char, ctx.menu_seen, has_save, ctx.runs_started))
         return "START %s" % char
@@ -1593,6 +1605,7 @@ def main():
         if not state.get("error"):
             if not at_main_menu(state, [str(a) for a in (state.get("available_commands") or [])]):
                 ctx.menu_seen = 0
+                ctx.start_sent = False  # left the menu (or resumed): re-arm
             if "SHOP" not in screen_type(state):
                 ctx.shop_seen = 0
 
