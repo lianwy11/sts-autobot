@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Slay the Spire driver v3 for CommunicationMod.
 # One decision per state line; the mod re-sends state after every command.
-import sys, json, os, io, time, glob
+import sys, json, os, io, time, glob, random
 from collections import deque
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -11,19 +11,36 @@ CHARACTER = os.path.join(BASE, "character.txt")
 LOG = os.path.join(BASE, "driver_log.txt")
 LAST = os.path.join(BASE, "last_state.json")
 
-# 玩哪个职业：character.txt 写 IRONCLAD / THE_SILENT / DEFECT / WATCHER 之一。
+# 玩哪个职业：character.txt 写 IRONCLAD / THE_SILENT / DEFECT / WATCHER 之一，
+# 或 RANDOM（每局随机）/ ROTATE（每局轮换）。锁定的职业自动跳过。
 # CommunicationMod 的 START 命令按枚举名匹配（大小写不敏感，SILENT 会被映射成 THE_SILENT）。
 PLAYABLE = {"IRONCLAD", "THE_SILENT", "SILENT", "DEFECT", "WATCHER"}
+ALL_CLASSES = ["IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"]
 
-def desired_character():
+def read_character_pref():
     try:
         if os.path.exists(CHARACTER):
             c = open(CHARACTER, "r", encoding="utf-8").read().strip().upper()
-            if c in PLAYABLE:
-                return "THE_SILENT" if c == "SILENT" else c
+            if c:
+                return c
     except Exception:
         pass
     return "IRONCLAD"
+
+def desired_character(ctx):
+    pref = read_character_pref()
+    locked = getattr(ctx, "locked_classes", set()) or set()
+    pool = [c for c in ALL_CLASSES if c not in locked] or ["IRONCLAD"]
+    if pref == "RANDOM":
+        return random.choice(pool)
+    if pref == "ROTATE":
+        return pool[(getattr(ctx, "runs_started", 0) or 0) % len(pool)]
+    want = "THE_SILENT" if pref == "SILENT" else pref
+    if want in PLAYABLE and want not in locked:
+        return want
+    if want in locked:
+        log("class %s locked, falling back" % want)
+    return random.choice(pool)
 
 RESUME_CLICK = "CLICK LEFT 240 660"
 
@@ -114,6 +131,28 @@ CARD_DB = {
     "Rip and Tear": (5, 2, 0, ""), "Sweeping Beam": (6, 1, 0, ""),
     "Charge Battery": (0, 1, 7, ""), "Glacier": (0, 1, 7, ""),
     "Hologram": (0, 1, 3, ""), "Rebound": (9, 1, 0, ""),
+    # Defect rest
+    "Leap": (0, 1, 9, ""), "Steam Barrier": (0, 1, 7, ""),
+    "Auto-Shields": (0, 1, 11, ""), "Equilibrium": (0, 1, 13, ""),
+    "Force Field": (0, 1, 4, ""), "Genetic Algorithm": (0, 1, 3, ""),
+    "Blitz": (7, 1, 0, ""), "Bullseye": (8, 1, 0, ""),
+    "Claw": (3, 1, 0, ""), "Doom and Gloom": (10, 1, 0, ""),
+    "Melter": (10, 1, 0, ""), "Scrape": (7, 1, 0, ""),
+    "Streamline": (15, 1, 0, ""), "Sunder": (24, 1, 0, ""),
+    "FTL": (4, 1, 0, ""), "All For One": (10, 1, 0, ""),
+    "Hyperbeam": (26, 1, 0, ""), "Thunder Strike": (7, 3, 0, ""),
+    "Core Surge": (11, 1, 0, ""),
+    "Blizzard": (0, 1, 0, "buff"), "Tempest": (0, 1, 0, "buff"),
+    "Defragment": (0, 1, 0, "buff"), "Biased Cognition": (0, 1, 0, "buff"),
+    "Capacitor": (0, 1, 0, "buff"), "Loop": (0, 1, 0, "buff"),
+    "Consume": (0, 1, 0, "buff"), "Amplify": (0, 1, 0, "buff"),
+    "Storm": (0, 1, 0, "buff"), "Static Discharge": (0, 1, 0, "buff"),
+    "Self Repair": (0, 1, 0, "buff"), "Creative AI": (0, 1, 0, "buff"),
+    "Buffer": (0, 1, 0, "buff"), "Fission": (0, 1, 0, "energy"),
+    "Double Energy": (0, 1, 0, "energy"), "Recursion": (0, 1, 0, ""),
+    "Darkness": (0, 1, 0, ""), "Fusion": (0, 1, 0, ""),
+    "Chill": (0, 1, 0, ""), "Skim": (0, 1, 0, ""),
+    "Overclock": (0, 1, 0, ""), "White Noise": (0, 1, 0, ""),
     # Watcher core (stance doubling not modeled; rough values)
     "Strike_P": (6, 1, 0, ""), "Defend_P": (0, 1, 5, ""),
     "Eruption": (9, 1, 0, ""), "Vigilance": (0, 1, 8, ""),
@@ -122,6 +161,26 @@ CARD_DB = {
     "Flying Sleeves": (4, 2, 0, ""), "Conclude": (12, 1, 0, ""),
     "Consecrate": (5, 1, 0, ""), "Crescendo": (0, 1, 0, ""),
     "Tranquility": (0, 1, 0, ""),
+    # Watcher rest
+    "Talk to the Hand": (5, 1, 0, ""), "Tantrum": (8, 1, 0, ""),
+    "Reach Heaven": (10, 1, 0, ""), "Ragnarök": (12, 3, 0, ""),
+    "Carve Reality": (13, 1, 0, ""), "Brilliance": (8, 1, 0, ""),
+    "Lesson Learned": (10, 1, 0, ""), "Empty Fist": (9, 1, 0, ""),
+    "Pressure Points": (8, 1, 0, ""), "Fear No Evil": (8, 1, 0, ""),
+    "Halt": (0, 1, 3, ""), "Sanctity": (0, 1, 6, ""),
+    "Inner Peace": (0, 1, 8, ""), "Spirit Shield": (0, 1, 6, ""),
+    "Just Lucky": (0, 1, 3, ""), "Prostrate": (0, 1, 4, ""),
+    "Empty Body": (0, 1, 7, ""), "Meditate": (0, 1, 0, ""),
+    "Pray": (0, 1, 0, ""), "Devotion": (0, 1, 0, "buff"),
+    "Foresight": (0, 1, 0, "buff"), "Nirvana": (0, 1, 0, "buff"),
+    "Like Water": (0, 1, 0, "buff"), "Establishment": (0, 1, 0, "buff"),
+    "Mental Fortress": (0, 1, 0, "buff"), "Rushdown": (0, 1, 0, "buff"),
+    "Wave of the Hand": (0, 1, 0, ""), "Fasting": (0, 1, 0, "buff"),
+    "Deus Ex Machina": (0, 1, 0, ""), "Collect": (0, 1, 0, ""),
+    "Conjure Blade": (0, 1, 0, ""), "Judgment": (0, 1, 0, ""),
+    "Blasphemy": (0, 1, 0, "buff"), "Wish": (0, 1, 0, "buff"),
+    "Omega": (50, 1, 0, ""), "Vault": (0, 1, 0, ""),
+    "Omniscience": (0, 1, 0, ""), "Scrawl": (0, 1, 0, ""),
 }
 
 # Card reward tiers by id (higher = want more). Missing = 1.
@@ -171,6 +230,17 @@ CARD_TIER = {
     "Glacier": 2.5, "Hologram": 2, "Rebound": 2,
     "Hyperbeam": 3, "Multi-Cast": 3, "Creative AI": 3, "All For One": 2.5,
     "Equilibrium": 2, "Loop": 2.5, "Capacitor": 2, "Auto-Shields": 2,
+    "Defragment": 3.5, "Biased Cognition": 3, "Buffer": 3,
+    "Blizzard": 2.5, "Tempest": 2.5, "Force Field": 2.5,
+    "Genetic Algorithm": 2.5, "Self Repair": 2.5, "Chill": 2.5,
+    "Static Discharge": 2.5, "Rainbow": 2.5, "Reboot": 2.5,
+    "Core Surge": 2.5, "Fission": 2, "Double Energy": 2.5,
+    "Amplify": 2.5, "Consume": 2, "Doom and Gloom": 2, "Melter": 2,
+    "Sunder": 2, "Streamline": 2, "FTL": 2, "Claw": 2,
+    "Bullseye": 2, "Blitz": 1.5, "Scrape": 1.5, "Steam Barrier": 1.5,
+    "Leap": 1.5, "Storm": 2, "Darkness": 2, "White Noise": 2,
+    "Hello World": 2, "Skim": 2, "Overclock": 1.5, "Recursion": 1.5,
+    "Fusion": 1.5, "Heatsinks": 1.5, "Reprogram": 1.5,
     # Watcher
     "Crush Joints": 2, "Sash Whip": 2, "Flurry of Blows": 2.2,
     "Follow-Up": 2.2, "Flying Sleeves": 2.2, "Conclude": 1.5,
@@ -180,21 +250,78 @@ CARD_TIER = {
     "Wish": 3, "Omega": 3, "Conjure Blade": 2, "Talk to the Hand": 2.5,
     "Tantrum": 2.5, "Meditation": 2, "Empty Body": 1.5, "Empty Fist": 2,
     "Just Lucky": 1.5,
+    "Vault": 3.5, "Omniscience": 3, "Ragnarök": 2.5, "Carve Reality": 2.5,
+    "Reach Heaven": 2.5, "Brilliance": 2.5, "Inner Peace": 2.5,
+    "Fear No Evil": 2.5, "Spirit Shield": 2.5, "Sanctity": 2,
+    "Pressure Points": 2, "Fasting": 2.5, "Foresight": 2,
+    "Devotion": 2, "Halt": 2, "Protect": 2, "Pray": 1.5,
+    "Prostrate": 1.5, "Deus Ex Machina": 2.5, "Establishment": 2.5,
+    "Like Water": 2, "Nirvana": 2, "Judgment": 2, "Collect": 2,
+    "Master Reality": 2.5, "Simmer": 1.5, "Foreign Influence": 2,
+    "Falcon Punch": 2, "Battle Hymn": 2,
 }
 UPGRADE_PRIORITY = [
-    "Demon Form", "Limit Break", "Bash", "Inflame", "Spot Weakness",
-    "Feed", "Immolate", "Body Slam", "Uppercut", "Predator", "Blade Dance",
-    "Footwork", "Metallicize", "Inflame", "Deadly Poison", "Noxious Fumes",
-    "Terror", "Carnage", "Heavy Blade", "Whirlwind", "Backstab",
-    "Poisoned Stab", "Impervious", "Juggernaut", "Second Wind", "Shockwave",
-    "Dark Embrace", "Shrug It Off", "Spot Weakness", "Thunderclap",
-    "Leg Sweep", "Cleave", "Riddle with Holes", "Flying Knee",
-    "Strike_R", "Strike_G", "Strike_B", "Neutralize",
-    "Twin Strike", "Pommel Strike", "Defend_R", "Defend_G", "Defend_B",
+    "Bash", "Inflame", "Spot Weakness", "Demon Form", "Limit Break",
+    "Feed", "Immolate", "Uppercut", "Predator", "Blade Dance", "Footwork",
+    "Metallicize", "Inflame", "Deadly Poison", "Noxious Fumes", "Terror",
+    "Carnage", "Heavy Blade", "Whirlwind", "Backstab", "Poisoned Stab",
+    "Impervious", "Juggernaut", "Second Wind", "Shockwave", "Dark Embrace",
+    "Shrug It Off", "Spot Weakness", "Thunderclap", "Leg Sweep",
+    "Strike_R", "Strike_G", "Neutralize",
+    "Twin Strike", "Pommel Strike", "Defend_R", "Defend_G",
 ]
+# per-class upgrade order (earlier = upgrade first)
+UPGRADE_PRIORITY_BY_CLASS = {
+    "IRONCLAD": [
+        "Demon Form", "Limit Break", "Bash", "Inflame", "Spot Weakness",
+        "Feed", "Immolate", "Body Slam", "Uppercut", "Carnage",
+        "Heavy Blade", "Whirlwind", "Impervious", "Juggernaut",
+        "Second Wind", "Shockwave", "Dark Embrace", "Shrug It Off",
+        "Metallicize", "Offering", "Reaper", "Corruption", "Barricade",
+        "Thunderclap", "Cleave", "Twin Strike", "Pommel Strike",
+        "Strike_R", "Defend_R",
+    ],
+    "THE_SILENT": [
+        "Adrenaline", "Corpse Explosion", "Die Die Die", "Wraith Form",
+        "Burst", "Terror", "Noxious Fumes", "Bouncing Flask", "Footwork",
+        "Predator", "Blade Dance", "Backstab", "Poisoned Stab",
+        "Eviscerate", "Caltrops", "Leg Sweep", "Backflip", "Deadly Poison",
+        "Sucker Punch", "Dagger Spray", "Cloak and Dagger", "Acrobatics",
+        "Slice", "Neutralize", "Strike_G", "Defend_G", "Survivor",
+    ],
+    "DEFECT": [
+        "Multi-Cast", "Creative AI", "Hyperbeam", "All For One",
+        "Defragment", "Biased Cognition", "Loop", "Capacitor", "Glacier",
+        "Charge Battery", "Coolheaded", "Cold Snap", "Ball Lightning",
+        "Sweeping Beam", "Compile Driver", "Rip and Tear", "Equilibrium",
+        "Hologram", "Auto-Shields", "Self Repair", "Force Field",
+        "Chill", "Static Discharge", "Tempest", "Blizzard",
+        "Go for the Eyes", "Beam Cell", "Strike_B", "Defend_B", "Leap",
+    ],
+    "WATCHER": [
+        "Wish", "Vault", "Omniscience", "Rushdown", "Scrawl", "Tantrum",
+        "Talk to the Hand", "Mental Fortress", "Lesson Learned",
+        "Blasphemy", "Wave of the Hand", "Ragnarök", "Carve Reality",
+        "Reach Heaven", "Inner Peace", "Fear No Evil", "Spirit Shield",
+        "Sanctity", "Empty Fist", "Conclude", "Flurry of Blows",
+        "Crush Joints", "Sash Whip", "Follow-Up", "Flying Sleeves",
+        "Fasting", "Meditate", "Deus Ex Machina", "Establishment",
+        "Halt", "Protect", "Eruption", "Vigilance",
+        "Strike_P", "Defend_P",
+    ],
+}
+
+def upgrade_priority_for(state):
+    cls = ((gs(state).get("class") or "IRONCLAD") + "").upper()
+    if cls == "SILENT":
+        cls = "THE_SILENT"
+    return UPGRADE_PRIORITY_BY_CLASS.get(cls, UPGRADE_PRIORITY)
+
 REMOVE_PRIORITY = ["Regret", "Injury", "Clumsy", "Decay", "Doubt", "Shame",
                     "Normality", "Pain", "Void",
-                    "Strike_G", "Strike_R", "Survivor", "Defend_G", "Defend_R"]
+                    "Strike_G", "Strike_R", "Strike_B", "Strike_P",
+                    "Survivor", "Defend_G", "Defend_R", "Defend_B", "Defend_P"]
+# Eruption/Vigilance never removed: they are the Watcher's stance engine
 
 # ---------------- archetype synergy ----------------
 STR_GAIN = {"Inflame", "Spot Weakness", "Feed", "Flex", "Demon Form", "Rupture"}
@@ -207,6 +334,18 @@ SHIV_CORE = {"Blade Dance", "Cloak and Dagger", "Infinite Blades", "Dead Branch"
              "Storm of Steel"}
 SHIV_PAYOFF = {"After Image", "A Thousand Cuts", "Envenom", "Finisher"}
 DEX_CORE = {"Footwork", "Backflip", "Leg Sweep"}
+# Defect: frost orbs block, focus multiplies every orb
+FROST_CORE = {"Glacier", "Cold Snap", "Coolheaded", "Tempest", "Blizzard",
+              "Auto-Shields", "Fusion", "Chill"}
+FOCUS_CORE = {"Defragment", "Biased Cognition", "Capacitor", "Loop",
+              "Amplify", "Consume"}
+# Watcher: stance entries need payoffs and vice versa
+STANCE_ENTER = {"Eruption", "Tantrum", "Crescendo", "Tranquility",
+                "Fear No Evil", "Inner Peace", "Blasphemy", "Wrathful Stand",
+                "Simmer", "Meditate"}
+STANCE_PAYOFF = {"Mental Fortress", "Rushdown", "Talk to the Hand",
+                 "Wave of the Hand", "Fasting", "Like Water", "Nirvana",
+                 "Brilliance", "Establishment", "Scrawl"}
 
 def synergy_bonus(card_id, deck_ids):
     """Score bump from the deck the card would join (build-around logic)."""
@@ -239,6 +378,16 @@ def synergy_bonus(card_id, deck_ids):
     EXHAUST_CORE = {"Corruption", "Feel No Pain", "Dark Embrace", "Second Wind"}
     if card_id in EXHAUST_CORE and n(EXHAUST_CORE) >= 1:
         b += 1.0
+    # Defect frost/focus engine
+    if card_id in FROST_CORE and n(FOCUS_CORE) >= 1:
+        b += 1.0
+    if card_id in FOCUS_CORE and n(FROST_CORE) >= 2:
+        b += 1.0
+    # Watcher stance dance
+    if card_id in STANCE_PAYOFF and n(STANCE_ENTER) >= 3:
+        b += 1.0
+    if card_id in STANCE_ENTER and n(STANCE_PAYOFF) >= 2:
+        b += 0.75
     return b
 
 BAD_RELICS = set()  # buy nothing known-harmful; relic pool is mostly good
@@ -840,7 +989,7 @@ def grid_action(state, avail_u):
                 return a.upper()
     if not ch:
         return "CHOOSE 0"
-    prio = UPGRADE_PRIORITY if "REST" in room else REMOVE_PRIORITY
+    prio = upgrade_priority_for(state) if "REST" in room else REMOVE_PRIORITY
     def rank(c):
         cid = c.get("id") or ""
         if cid in prio:
@@ -1016,7 +1165,7 @@ def rest_action(state, avail_u):
 
     deck = g.get("deck") or []
     key_left = [c.get("id") for c in deck
-                if (c.get("id") in UPGRADE_PRIORITY[:18])
+                if (c.get("id") in upgrade_priority_for(state)[:18])
                 and (c.get("upgrades") or 0) == 0]
     smith_v = 0.15  # nothing key left: heal beats a sidegrade upgrade
     if key_left:
@@ -1175,7 +1324,9 @@ class Ctx(object):
     shop_entered_floor = None  # 商店每层只进一次
     purge_attempted_floor = None  # 删卡每层只买一次（防死循环）
     start_fail = 0       # START 命令连续失败次数（职业未解锁等）
-    start_fallback = False
+    locked_classes = set()  # START 失败判定为锁定的职业
+    last_start_class = None
+    runs_started = 0     # ROTATE 轮换计数
     stuck = 0            # 无指令可发的状态计数（过场/弹窗卡住）
 
 def combat_reward_action(state, ctx):
@@ -1234,8 +1385,12 @@ def pick_command(state, ctx):
         has_save = bool(glob.glob(r"D:\Steam\steamapps\common\SlayTheSpire\saves\*.autosave"))
         if mode == "continue" and has_save and ctx.menu_seen <= 5:
             return RESUME_CLICK
-        char = "IRONCLAD" if ctx.start_fallback else desired_character()
-        log("menu: START %s (menu_seen=%d has_save=%s)" % (char, ctx.menu_seen, has_save))
+        ctx.start_fail = 0  # a fresh menu resets the failure streak
+        char = desired_character(ctx)
+        ctx.last_start_class = char
+        ctx.runs_started += 1
+        log("menu: START %s (menu_seen=%d has_save=%s run#%d)"
+            % (char, ctx.menu_seen, has_save, ctx.runs_started))
         return "START %s" % char
 
     # 对对碰！(Match and Keep)：CommunicationMod 对该事件状态不完整，
@@ -1384,13 +1539,20 @@ def main():
             ctx.match_flips = 0
             ctx.stuck = 0
 
-        # START rejected 3x: class is probably locked -> fall back to IRONCLAD
-        if state.get("error") and cmd and str(cmd).upper().startswith("START"):
+        # START rejected 3x for the same class: lock it (not unlocked in this
+        # save) and let desired_character pick a different one next menu
+        if (state.get("error") and cmd
+                and str(cmd).upper().startswith("START")
+                and ctx.last_start_class):
             ctx.start_fail += 1
-            if ctx.start_fail >= 3 and not ctx.start_fallback:
-                ctx.start_fallback = True
-                log("START failed %dx (class locked?), falling back to IRONCLAD"
-                    % ctx.start_fail)
+            if ctx.start_fail >= 3:
+                if ctx.last_start_class not in ctx.locked_classes:
+                    ctx.locked_classes.add(ctx.last_start_class)
+                    log("START %s failed %dx -> class locked (unlocked?); locked=%s"
+                        % (ctx.last_start_class, ctx.start_fail,
+                           sorted(ctx.locked_classes)))
+                ctx.start_fail = 0
+                ctx.menu_seen = 99  # skip straight to a fresh START decision
 
         if screen_type(state) == "NONE" and (gs(state).get("combat_state") or {}).get("monsters"):
             mons_dbg = ",".join("%s(%d/%d)" % (m.get("id") or "?", m.get("current_hp") or 0, m.get("max_hp") or 0)
