@@ -1210,6 +1210,15 @@ def pick_command(state, ctx):
         return "KEY Cancel"
     if any(a.upper() == "CHOOSE" for a in avail_u):
         ctx.stuck = 0
+        # combat still live (mod can report MAP mid-fight animation): clicking
+        # a node corrupts the game state -> wait for the fight to finish
+        map_live = ((gs(state).get("room_phase") or "").upper() != "COMBAT"
+                    and (gs(state).get("action_phase") or "").upper()
+                    != "EXECUTING_ACTIONS")
+        if st == "MAP" and not map_live:
+            log("map ignored mid-combat (room_phase=%s action=%s) -> wait"
+                % (gs(state).get("room_phase"), gs(state).get("action_phase")))
+            return "WAIT 60"
         if st == "MAP":
             return map_action(state, avail_u)
         if st == "COMBAT_REWARD":
