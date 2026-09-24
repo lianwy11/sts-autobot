@@ -570,6 +570,10 @@ def estimated_attack(card, player):
     dmg += strn
     if has_power(player.get("powers"), "Weak"):
         dmg = int(dmg * 0.75)
+    if SHADOW_STANCE[0] == "WRATH":       # Watcher: double damage dealt
+        dmg = int(dmg * 2)
+    elif SHADOW_STANCE[0] == "DIVINITY":
+        dmg = int(dmg * 3)
     return dmg * hits
 
 def estimated_block(card, player):
@@ -592,6 +596,30 @@ def living_monsters(state):
     return any((m.get("current_hp") or 0) > 0 and not m.get("is_gone")
                and not m.get("half_dead")
                for m in (cs.get("monsters") or []))
+
+# ---- Watcher stance shadow-tracking (the mod does not report stances) ----
+# Cards we KNOW change stance; the driver tracks the belief across its own
+# plays so Wrath's damage doubling can be respected.
+STANCE_WRATH_CARDS = {"Eruption", "Tantrum", "Crescendo", "Wrathful Stand"}
+STANCE_CALM_CARDS = {"Tranquility", "Inner Peace", "Fear No Evil", "Calm"}
+SHADOW_STANCE = [None]  # None / "WRATH" / "CALM" / "DIVINITY"
+
+def note_stance_card(cid):
+    if cid in STANCE_WRATH_CARDS:
+        SHADOW_STANCE[0] = "WRATH"
+    elif cid in STANCE_CALM_CARDS:
+        SHADOW_STANCE[0] = "CALM"
+    elif cid == "Blasphemy":
+        SHADOW_STANCE[0] = "DIVINITY"
+
+def frost_orb_block(player):
+    """Passive block frost orbs will add at end of turn (Defect)."""
+    total = 0
+    for o in (player.get("orbs") or []):
+        nm = (o.get("id") or "") + (o.get("name") or "")
+        if "Frost" in nm or "霜" in nm:
+            total += o.get("passive_amount") or 0
+    return total
 
 def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks):
     """Unified potion valuation: score every held potion in HP-equivalent
@@ -787,11 +815,13 @@ def combat_action(state, avail_u):
         return None
 
     incoming = sum(monster_intent_damage(m) for _, m in mons)
+    if SHADOW_STANCE[0] == "WRATH":
+        incoming = int(incoming * 2)  # Watcher takes double in Wrath
     hp = player.get("current_hp") or g.get("current_hp") or 1
     max_hp = player.get("max_hp") or g.get("max_hp") or 1
     hp_frac = hp / float(max_hp) if max_hp else 1.0
     cur_block = player.get("block") or 0
-    residual = max(0, incoming - cur_block)
+    residual = max(0, incoming - cur_block - frost_orb_block(player))
     big_fight = is_elite_or_boss(g)
     mon_hp_max = max((m.get("current_hp") or 0) + (m.get("block") or 0) for _, m in mons)
 
@@ -814,6 +844,10 @@ def combat_action(state, avail_u):
     if ri is not None and attacks:
         best = max(attacks, key=lambda p: estimated_attack(p[1], player))
         return "PLAY %d %d" % (best[0], ri)
+
+    # Blasphemy kills us at the start of next turn unless it ends the fight:
+    # only the lethal branch above may ever play it
+    attacks = [p for p in attacks if (p[1].get("id") or "") != "Blasphemy"]
 
     # 0b. unified potion valuation (all potions, all contexts)
     if "Sozu" not in relic_id_list(g):
@@ -854,6 +888,13 @@ def combat_action(state, avail_u):
             blk_all.sort(key=lambda t: -t[2])
             log("desperation: hp %d vs %d incoming -> block" % (hp, incoming))
             return "PLAY %d" % blk_all[0][0]
+
+    # 2d. Watcher: leaving Wrath before a doubled hit beats blocking half of it
+    if SHADOW_STANCE[0] == "WRATH" and residual >= max(6, int(hp * 0.2)):
+        for i, c in skills:
+            if (c.get("id") or "") in STANCE_CALM_CARDS:
+                log("wrath exit: %d doubled incoming -> calm" % incoming)
+                return "PLAY %d" % i
 
     # 3. block policy: bosses near-full block, elites/boss 4, else 6
     mon_ids = "|".join((m.get("id") or "") + (m.get("name") or "") for _, m in mons)
@@ -1386,6 +1427,11 @@ def pick_command(state, ctx):
         if mode == "continue" and has_save and ctx.menu_seen <= 5:
             return RESUME_CLICK
         ctx.start_fail = 0  # a fresh menu resets the failure streak
+        # a class may have been unlocked mid-session (e.g. Silent just beat
+        # act 1): retry locked classes once every 8 runs
+        if ctx.runs_started and ctx.runs_started % 8 == 0 and ctx.locked_classes:
+            log("retrying locked classes %s after 8 runs" % sorted(ctx.locked_classes))
+            ctx.locked_classes.clear()
         char = desired_character(ctx)
         ctx.last_start_class = char
         ctx.runs_started += 1
@@ -1449,6 +1495,15 @@ def pick_command(state, ctx):
     if any(a.upper() == "PLAY" for a in avail_u) or "END" in avail_up:
         cmd = combat_action(state, avail_u)
         if cmd:
+            # record our own stance changes (mod never reports them)
+            if cmd.startswith("PLAY "):
+                try:
+                    idx = int(cmd.split()[1]) - 1
+                    hand = (gs(state).get("combat_state") or {}).get("hand") or []
+                    if 0 <= idx < len(hand):
+                        note_stance_card(hand[idx].get("id") or "")
+                except Exception:
+                    pass
             return cmd
         if not (gs(state).get("combat_state") or {}).get("monsters"):
             # 'end' listed but no fight: post-room overlay is blocking
@@ -1538,6 +1593,7 @@ def main():
             ctx.potion_attempted = False
             ctx.match_flips = 0
             ctx.stuck = 0
+            SHADOW_STANCE[0] = None  # new room: stance resets
 
         # START rejected 3x for the same class: lock it (not unlocked in this
         # save) and let desired_character pick a different one next menu
