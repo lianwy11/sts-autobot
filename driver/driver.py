@@ -982,6 +982,8 @@ def rest_action(state, avail_u):
     boss_floor = {1: 16, 2: 33, 3: 51}.get(act, 16)
     if floor >= boss_floor - 3 and frac < 0.85:
         rest_v += 0.20  # bring HP into the boss fight
+    if floor >= boss_floor - 4 and frac < 0.70:
+        rest_v += 0.50  # entering the boss under 70% is how runs die
     relic_ids = [r.get("id") for r in (g.get("relics") or [])]
     if set(relic_ids) & REGEN_RELICS:
         rest_v -= 0.08  # sustain relics heal through combats
@@ -1046,7 +1048,7 @@ def map_action(state, avail_u):
         if (c.get("upgrades") or 0) > 0:
             deck_power += 1
     if (g.get("act") or 1) == 1:
-        elite_ready = frac >= 0.85 and deck_power >= 8  # act-1 elites eat weak decks
+        elite_ready = frac >= 0.90 and deck_power >= 8  # act-1 elites eat weak decks
     else:
         elite_ready = frac >= 0.85 and deck_power >= 8  # act-2 elites are lethal
     act = g.get("act") or 1
