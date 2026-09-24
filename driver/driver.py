@@ -436,6 +436,14 @@ def is_elite_or_boss(g):
     room = (g.get("room_type") or "").upper()
     return "ELITE" in room or "BOSS" in room
 
+def living_monsters(state):
+    """True if the reported combat still has living enemies (the reliable
+    'fight is live' signal; room_phase/action_phase can lag behind)."""
+    cs = gs(state).get("combat_state") or {}
+    return any((m.get("current_hp") or 0) > 0 and not m.get("is_gone")
+               and not m.get("half_dead")
+               for m in (cs.get("monsters") or []))
+
 def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks):
     """Unified potion valuation: score every held potion in HP-equivalent
     value for the current combat state; drink the best if it clears the bar."""
@@ -1221,17 +1229,12 @@ def pick_command(state, ctx):
             ctx.match_flips += 1
             return "CHOOSE %d" % idx
         return "KEY Cancel"
-    if any(a.upper() == "CHOOSE" for a in avail_u):
+    if any(a.upper() == "CHOOSE" for a in avail_u) and not (
+            st == "MAP" and living_monsters(state)):
+        # MAP reported while monsters are still alive is a mod misdetection
+        # (stale room_phase COMBAT after the fight too): clicking a node with
+        # the fight live corrupts the game, so route those states to combat
         ctx.stuck = 0
-        # combat still live (mod can report MAP mid-fight animation): clicking
-        # a node corrupts the game state -> wait for the fight to finish
-        map_live = ((gs(state).get("room_phase") or "").upper() != "COMBAT"
-                    and (gs(state).get("action_phase") or "").upper()
-                    != "EXECUTING_ACTIONS")
-        if st == "MAP" and not map_live:
-            log("map ignored mid-combat (room_phase=%s action=%s) -> wait"
-                % (gs(state).get("room_phase"), gs(state).get("action_phase")))
-            return "WAIT 60"
         if st == "MAP":
             return map_action(state, avail_u)
         if st == "COMBAT_REWARD":
