@@ -826,6 +826,15 @@ def combat_action(state, avail_u):
     mon_hp_max = max((m.get("current_hp") or 0) + (m.get("block") or 0) for _, m in mons)
 
     playable = [(i, c) for i, c in enumerate(hand, 1) if c.get("is_playable")]
+
+    def play_card(i, c):
+        """Targeted skills (Leg Sweep, Terror, Fear No Evil...) need an enemy
+        index or the game rejects the command; untargeted cards must NOT get
+        one. Attacks pick their target at each call site."""
+        if c.get("has_target"):
+            tgt = max(mons, key=lambda rm: monster_intent_damage(rm[1]))[0]
+            return "PLAY %d %d" % (i, tgt)
+        return "PLAY %d" % i
     attacks = [(i, c) for i, c in playable if "attack" in (c.get("type") or "").lower()]
     skills = [(i, c) for i, c in playable if "skill" in (c.get("type") or "").lower()]
     powers = [(i, c) for i, c in playable if "power" in (c.get("type") or "").lower()]
@@ -887,14 +896,14 @@ def combat_action(state, avail_u):
         if blk_all:
             blk_all.sort(key=lambda t: -t[2])
             log("desperation: hp %d vs %d incoming -> block" % (hp, incoming))
-            return "PLAY %d" % blk_all[0][0]
+            return play_card(blk_all[0][0], blk_all[0][1])
 
     # 2d. Watcher: leaving Wrath before a doubled hit beats blocking half of it
     if SHADOW_STANCE[0] == "WRATH" and residual >= max(6, int(hp * 0.2)):
         for i, c in skills:
             if (c.get("id") or "") in STANCE_CALM_CARDS:
                 log("wrath exit: %d doubled incoming -> calm" % incoming)
-                return "PLAY %d" % i
+                return play_card(i, c)
 
     # 3. block policy: bosses near-full block, elites/boss 4, else 6
     mon_ids = "|".join((m.get("id") or "") + (m.get("name") or "") for _, m in mons)
@@ -918,13 +927,13 @@ def combat_action(state, avail_u):
         if blk_cards:
             blk_cards.sort(key=lambda t: -t[2])
             i, c, _ = blk_cards[0]
-            return "PLAY %d" % i
+            return play_card(i, c)
 
     # 5. develop powers when safe
     if residual < threshold and powers:
         good = [(i, c) for i, c in powers if card_info(c)[3] in ("buff", "energy")]
         if good:
-            return "PLAY %d" % good[0][0]
+            return play_card(good[0][0], good[0][1])
 
     # 6. poison on long fights; commit harder when the deck is a poison build
     deck_ids = [c.get("id") for c in (g.get("deck") or [])]
@@ -964,7 +973,7 @@ def combat_action(state, avail_u):
     if skills:
         blk_cards = [(i, c) for i, c in skills if estimated_block(c, player) >= 5]
         if blk_cards:
-            return "PLAY %d" % blk_cards[0][0]
+            return play_card(blk_cards[0][0], blk_cards[0][1])
 
     return "END"
 
