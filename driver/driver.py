@@ -1048,7 +1048,7 @@ def map_action(state, avail_u):
         if (c.get("upgrades") or 0) > 0:
             deck_power += 1
     if (g.get("act") or 1) == 1:
-        elite_ready = frac >= 0.90 and deck_power >= 8  # act-1 elites eat weak decks
+        elite_ready = frac >= 0.90 and deck_power >= 10  # act-1 elites eat weak decks
     else:
         elite_ready = frac >= 0.85 and deck_power >= 8  # act-2 elites are lethal
     act = g.get("act") or 1
@@ -1254,19 +1254,20 @@ def pick_command(state, ctx):
         # is still ShopRoom, and shop_action must not steal those states
         if st == "GRID":
             return grid_action(state, avail_u)
-        if "SHOP" in st or "SHOP" in room:
-            return shop_action(state, avail_u, ctx)
         if st == "CARD_REWARD":
             ctx.card_reward_done = True  # decided (take or skip): don't reopen
             return card_reward_action(state, avail_u)
         if "REST" in room or any("休息" in str(c) for c in choices(state)):
             return rest_action(state, avail_u)
-        if st == "MAP":
-            return map_action(state, avail_u)
         if st in ("EVENT", "GHOST") or "event" in st.lower():
             return event_action(state, avail_u)
         if st == "HAND_SELECT":
             return "CHOOSE 0"
+        # room-based shop catch-all LAST: combat rewards can appear while
+        # room_type is already ShopRoom; routed earlier, the reward cards
+        # look like price-less shop stock and the reward flow loops
+        if "SHOP" in st or "SHOP" in room:
+            return shop_action(state, avail_u, ctx)
         return "CHOOSE 0"
 
     if any(a.upper() == "PLAY" for a in avail_u) or "END" in avail_up:
