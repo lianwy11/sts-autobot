@@ -911,6 +911,7 @@ def combat_action(state, avail_u):
                 return play_card(i, c)
 
     # 3. block policy: bosses near-full block, elites/boss 4, else 6
+    #    (a chipped deck in act 1 blocks one point earlier to stop attrition)
     mon_ids = "|".join((m.get("id") or "") + (m.get("name") or "") for _, m in mons)
     if "GremlinNob" in mon_ids or "地精大汉" in mon_ids:
         threshold = 4  # enrage adds +2 str/skill, but unblocked 20-dmg turns kill
@@ -920,6 +921,8 @@ def combat_action(state, avail_u):
         threshold = 3
     elif big_fight or hp_frac < 0.5:
         threshold = 4
+    elif hp_frac < 0.65:
+        threshold = 5
     else:
         threshold = 6
     if residual >= threshold:
@@ -1232,6 +1235,8 @@ def rest_action(state, avail_u):
 
     if frac <= (0.5 if act >= 2 else 0.45):
         decision = "rest"
+    elif act == 1 and frac < 0.72:
+        decision = "rest" if rest_v >= 0.18 else "smith"  # act-1 attrition
     else:
         decision = "rest" if rest_v >= smith_v else "smith"
     log("campfire: rest %.2f vs smith %.2f (key upgrades left: %s) -> %s" % (
@@ -1288,20 +1293,24 @@ def map_action(state, avail_u):
     def nscore(sym):
         if sym == "R":
             if frac < 0.45:
-                return 3.5
-            if frac < 0.55:
-                return 3.0
+                return 3.6
+            if frac < 0.6:
+                return 3.3
+            if frac < 0.75:
+                return 3.0 if act >= 2 else 2.9  # act 1: campfires keep runs alive
             if frac < 0.7:
                 return 3.2 if pre_boss else 2.6  # pre-boss: heal up hard
             return (2.8 if pre_boss else 2.0) if act >= 2 else (2.6 if floor >= 13 else 2.0)
         if sym == "M":
             w = 1.4 if deck_size < 18 else 1.0
             if frac < 0.25:
-                w -= 3.0  # dying: fights can kill us outright
+                w -= 4.0  # dying: fights can kill us outright
             elif frac < 0.4:
-                w -= 1.0
+                w -= 2.0
+            elif frac < 0.6:
+                w -= 1.0  # act-1 attrition: don't feed a hurt deck to packs
             elif frac < 0.7:
-                w -= 0.3  # chipped: prefer safer nodes at equal value
+                w -= 0.3
             return w
         if sym == "?":
             w = 1.1 if floor < 12 else 0.8
