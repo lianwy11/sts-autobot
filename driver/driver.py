@@ -16,6 +16,23 @@ LAST = os.path.join(BASE, "last_state.json")
 # CommunicationMod 的 START 命令按枚举名匹配（大小写不敏感，SILENT 会被映射成 THE_SILENT）。
 PLAYABLE = {"IRONCLAD", "THE_SILENT", "SILENT", "DEFECT", "WATCHER"}
 ALL_CLASSES = ["IRONCLAD", "THE_SILENT", "DEFECT", "WATCHER"]
+ROTATE_STATE = os.path.join(BASE, "rotate_count.txt")
+
+def read_rotate_count():
+    """ROTATE 计数持久化：驱动重启（改代码/崩溃恢复）不该让轮换回到铁甲。"""
+    try:
+        return int(open(ROTATE_STATE, "r", encoding="utf-8").read().strip())
+    except Exception:
+        return 0
+
+def bump_rotate_count():
+    n = read_rotate_count() + 1
+    try:
+        with open(ROTATE_STATE, "w", encoding="utf-8") as f:
+            f.write(str(n))
+    except Exception:
+        pass
+    return n
 
 def read_character_pref():
     try:
@@ -34,7 +51,7 @@ def desired_character(ctx):
     if pref == "RANDOM":
         return random.choice(pool)
     if pref == "ROTATE":
-        return pool[(getattr(ctx, "runs_started", 0) or 0) % len(pool)]
+        return pool[read_rotate_count() % len(pool)]
     want = "THE_SILENT" if pref == "SILENT" else pref
     if want in PLAYABLE and want not in locked:
         return want
@@ -1467,8 +1484,10 @@ def pick_command(state, ctx):
         ctx.last_start_class = char
         ctx.runs_started += 1
         ctx.start_sent = True
-        log("menu: START %s (menu_seen=%d has_save=%s run#%d)"
-            % (char, ctx.menu_seen, has_save, ctx.runs_started))
+        if "ROTATE" == read_character_pref().strip().upper():
+            bump_rotate_count()  # persistent across driver restarts
+        log("menu: START %s (menu_seen=%d has_save=%s run#%d rot#%d)"
+            % (char, ctx.menu_seen, has_save, ctx.runs_started, read_rotate_count()))
         return "START %s" % char
 
     # 对对碰！(Match and Keep)：CommunicationMod 对该事件状态不完整，
