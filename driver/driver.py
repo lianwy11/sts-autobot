@@ -1433,7 +1433,9 @@ def pick_command(state, ctx):
         except Exception:
             pass
         has_save = bool(glob.glob(r"D:\Steam\steamapps\common\SlayTheSpire\saves\*.autosave"))
-        if mode == "continue" and has_save and ctx.menu_seen <= 5:
+        if mode == "continue" and has_save and ctx.menu_seen <= 40:
+            # the main menu needs ~2s to fade in; early clicks land on the
+            # animation, so keep clicking well past it before giving up
             return RESUME_CLICK
         ctx.start_fail = 0  # a fresh menu resets the failure streak
         # a class may have been unlocked mid-session (e.g. Silent just beat
