@@ -7,8 +7,23 @@ from collections import deque
 BASE = os.path.dirname(os.path.abspath(__file__))
 MANUAL = os.path.join(BASE, "manual_cmd.txt")
 MODE = os.path.join(BASE, "mode.txt")
+CHARACTER = os.path.join(BASE, "character.txt")
 LOG = os.path.join(BASE, "driver_log.txt")
 LAST = os.path.join(BASE, "last_state.json")
+
+# 玩哪个职业：character.txt 写 IRONCLAD / THE_SILENT / DEFECT / WATCHER 之一。
+# CommunicationMod 的 START 命令按枚举名匹配（大小写不敏感，SILENT 会被映射成 THE_SILENT）。
+PLAYABLE = {"IRONCLAD", "THE_SILENT", "SILENT", "DEFECT", "WATCHER"}
+
+def desired_character():
+    try:
+        if os.path.exists(CHARACTER):
+            c = open(CHARACTER, "r", encoding="utf-8").read().strip().upper()
+            if c in PLAYABLE:
+                return "THE_SILENT" if c == "SILENT" else c
+    except Exception:
+        pass
+    return "IRONCLAD"
 
 RESUME_CLICK = "CLICK LEFT 240 660"
 
@@ -66,6 +81,47 @@ CARD_DB = {
     "Finisher": (5, 1, 0, ""), "Expertise": (0, 1, 0, ""),
     "Bouncing Flask": (0, 1, 0, "poison"), "Catalyst": (0, 1, 0, "poison"),
     "Envenom": (0, 1, 0, "buff"), "After Image": (0, 1, 0, "buff"),
+    # Ironclad gaps (seen skipped/misplayed in run logs)
+    "Body Slam": (0, 1, 0, ""), "Cleave": (8, 1, 0, ""),
+    "Clash": (14, 1, 0, ""), "Sword Boomerang": (3, 3, 0, ""),
+    "Wild Strike": (12, 1, 0, ""), "Reckless Charge": (7, 1, 0, ""),
+    "Pummel": (2, 4, 0, ""), "Bludgeon": (32, 1, 0, ""),
+    "Perfected Strike": (6, 1, 0, ""), "Immolate": (21, 1, 0, ""),
+    "Thunderclap": (4, 1, 0, "vuln"), "Demon Form": (0, 1, 0, "buff"),
+    "Limit Break": (0, 1, 0, "buff"), "Corruption": (0, 1, 0, "buff"),
+    "Barricade": (0, 1, 0, "buff"), "Ghostly Armor": (0, 1, 10, ""),
+    "Entrench": (0, 1, 0, ""), "Power Through": (0, 1, 15, ""),
+    "Second Wind": (0, 1, 5, ""), "Disarm": (0, 1, 0, "weak"),
+    "Shockwave": (0, 1, 0, "weak"), "Intimidate": (0, 1, 0, "weak"),
+    "Seeing Red": (0, 1, 0, "energy"), "Burning Pact": (0, 1, 0, "energy"),
+    "Bloodletting": (0, 1, 0, "energy"), "Battle Trance": (0, 1, 0, ""),
+    "Warcry": (0, 1, 0, ""), "Dual Wield": (0, 1, 0, ""),
+    "Infernal Blade": (0, 1, 0, ""), "Havoc": (0, 1, 0, ""),
+    "Evolve": (0, 1, 0, "buff"), "Feel No Pain": (0, 1, 0, "buff"),
+    "Dark Embrace": (0, 1, 0, "buff"), "Fire Breathing": (0, 1, 0, "buff"),
+    "Rupture": (0, 1, 0, "buff"), "Brutality": (0, 1, 0, "buff"),
+    "Juggernaut": (0, 1, 0, "buff"), "Rage": (0, 1, 0, "buff"),
+    "Combust": (0, 1, 0, "buff"), "Exhume": (0, 1, 0, ""),
+    # Silent gaps
+    "Deflect": (0, 1, 4, ""), "Flying Knee": (11, 1, 0, ""),
+    "Riddle with Holes": (3, 4, 0, ""), "Storm of Steel": (0, 1, 0, ""),
+    "Infinite Blades": (0, 1, 0, "buff"),
+    # Defect core (rough values; fallback covers the rest)
+    "Strike_B": (6, 1, 0, ""), "Defend_B": (0, 1, 5, ""),
+    "Ball Lightning": (8, 1, 0, ""), "Cold Snap": (6, 1, 0, ""),
+    "Coolheaded": (0, 1, 4, ""), "Compile Driver": (7, 1, 0, ""),
+    "Go for the Eyes": (3, 1, 0, "weak"), "Beam Cell": (3, 1, 0, "vuln"),
+    "Rip and Tear": (5, 2, 0, ""), "Sweeping Beam": (6, 1, 0, ""),
+    "Charge Battery": (0, 1, 7, ""), "Glacier": (0, 1, 7, ""),
+    "Hologram": (0, 1, 3, ""), "Rebound": (9, 1, 0, ""),
+    # Watcher core (stance doubling not modeled; rough values)
+    "Strike_P": (6, 1, 0, ""), "Defend_P": (0, 1, 5, ""),
+    "Eruption": (9, 1, 0, ""), "Vigilance": (0, 1, 8, ""),
+    "Crush Joints": (8, 1, 0, ""), "Sash Whip": (8, 1, 0, "weak"),
+    "Flurry of Blows": (4, 1, 0, ""), "Follow-Up": (7, 1, 0, ""),
+    "Flying Sleeves": (4, 2, 0, ""), "Conclude": (12, 1, 0, ""),
+    "Consecrate": (5, 1, 0, ""), "Crescendo": (0, 1, 0, ""),
+    "Tranquility": (0, 1, 0, ""),
 }
 
 # Card reward tiers by id (higher = want more). Missing = 1.
@@ -97,16 +153,44 @@ CARD_TIER = {
     "Bash": 2.5, "Inflame": 3.5, "Spot Weakness": 3, "Demon Form": 3.5,
     "Rupture": 2.5, "Brutality": 2.5, "Heavy Blade": 3, "Whirlwind": 3,
     "Limit Break": 3.5, "Barricade": 3, "Berserk": 2.5,
+    # Ironclad gaps
+    "Body Slam": 3, "Cleave": 2.2, "Clash": 1.5, "Sword Boomerang": 2.2,
+    "Wild Strike": 2, "Reckless Charge": 1.5, "Pummel": 2, "Bludgeon": 2.5,
+    "Perfected Strike": 1, "Immolate": 3, "Thunderclap": 2,
+    "Ghostly Armor": 2, "Entrench": 2.5, "Power Through": 2,
+    "Disarm": 2.5, "Seeing Red": 2.5, "Burning Pact": 2,
+    "Bloodletting": 2, "Infernal Blade": 2, "Evolve": 2, "Havoc": 1,
+    "Dual Wield": 1.5, "Rage": 1, "Combust": 1, "Exhume": 2,
+    # Silent gaps
+    "Deflect": 1.5, "Flying Knee": 2.2, "Riddle with Holes": 2,
+    "Storm of Steel": 2.5, "Infinite Blades": 2.5,
+    # Defect
+    "Ball Lightning": 2.5, "Cold Snap": 2.2, "Coolheaded": 2.2,
+    "Compile Driver": 2, "Go for the Eyes": 2, "Beam Cell": 1.5,
+    "Rip and Tear": 2, "Sweeping Beam": 2, "Charge Battery": 2.5,
+    "Glacier": 2.5, "Hologram": 2, "Rebound": 2,
+    "Hyperbeam": 3, "Multi-Cast": 3, "Creative AI": 3, "All For One": 2.5,
+    "Equilibrium": 2, "Loop": 2.5, "Capacitor": 2, "Auto-Shields": 2,
+    # Watcher
+    "Crush Joints": 2, "Sash Whip": 2, "Flurry of Blows": 2.2,
+    "Follow-Up": 2.2, "Flying Sleeves": 2.2, "Conclude": 1.5,
+    "Consecrate": 2, "Crescendo": 1.5, "Tranquility": 1.5,
+    "Rushdown": 3, "Scrawl": 3.5, "Mental Fortress": 2.5,
+    "Wave of the Hand": 2.5, "Lesson Learned": 3, "Blasphemy": 2.5,
+    "Wish": 3, "Omega": 3, "Conjure Blade": 2, "Talk to the Hand": 2.5,
+    "Tantrum": 2.5, "Meditation": 2, "Empty Body": 1.5, "Empty Fist": 2,
+    "Just Lucky": 1.5,
 }
 UPGRADE_PRIORITY = [
-    "Bash", "Inflame", "Spot Weakness", "Demon Form", "Limit Break",
-    "Feed", "Immolate", "Uppercut", "Predator", "Blade Dance", "Footwork",
-    "Metallicize", "Inflame", "Deadly Poison", "Noxious Fumes", "Terror",
-    "Carnage", "Heavy Blade", "Whirlwind", "Backstab", "Poisoned Stab",
-    "Impervious", "Juggernaut", "Second Wind", "Shockwave", "Dark Embrace",
-    "Shrug It Off", "Spot Weakness", "Thunderclap", "Leg Sweep",
-    "Strike_R", "Strike_G", "Neutralize",
-    "Twin Strike", "Pommel Strike", "Defend_R", "Defend_G",
+    "Demon Form", "Limit Break", "Bash", "Inflame", "Spot Weakness",
+    "Feed", "Immolate", "Body Slam", "Uppercut", "Predator", "Blade Dance",
+    "Footwork", "Metallicize", "Inflame", "Deadly Poison", "Noxious Fumes",
+    "Terror", "Carnage", "Heavy Blade", "Whirlwind", "Backstab",
+    "Poisoned Stab", "Impervious", "Juggernaut", "Second Wind", "Shockwave",
+    "Dark Embrace", "Shrug It Off", "Spot Weakness", "Thunderclap",
+    "Leg Sweep", "Cleave", "Riddle with Holes", "Flying Knee",
+    "Strike_R", "Strike_G", "Strike_B", "Neutralize",
+    "Twin Strike", "Pommel Strike", "Defend_R", "Defend_G", "Defend_B",
 ]
 REMOVE_PRIORITY = ["Regret", "Injury", "Clumsy", "Decay", "Doubt", "Shame",
                     "Normality", "Pain", "Void",
@@ -168,6 +252,9 @@ def relic_id_list(g):
 
 BOSS_AOE = {"Whirlwind", "Thunderclap", "Cleave", "Immolate", "Fire Breathing",
             "Dagger Spray", "All-Out Attack", "Corpse Explosion", "Die Die Die"}
+# act-2 packs (3 Byrds, Cultists, Snake Plant + followers...) demand AoE
+AOE_ATTACKS = BOSS_AOE | {"Rip and Tear", "Sweeping Beam", "Consecrate",
+                          "Reaper", "Riddle with Holes", "Tempest", "FTL"}
 BOSS_BLOCK = {"Metallicize", "Shrug It Off", "Impervious", "Footwork",
               "Ghostly Armor", "Barricade", "Juggernaut", "Second Wind"}
 
@@ -185,6 +272,17 @@ def boss_syn(card_id, boss):
             b += 0.5
     return b
 
+# Act-boss relic pick after floor 16/33/51: engine relics first, rest-hostile
+# ones (Sozu/Coffee Dripper) last. Keys are English relic ids.
+BOSS_RELIC_TIER = {
+    "Snecko Eye": 5.0, "Runic Pyramid": 4.5, "Pandora's Box": 4.5,
+    "Astrolabe": 4.0, "Sacred Bark": 3.5, "Philosopher's Stone": 3.5,
+    "Wrist Blade": 3.5, "Black Star": 3.0, "Velvet Choker": 3.0,
+    "Tiny House": 3.0, "Runic Dome": 2.5, "Ectoplasm": 2.0,
+    "Ring of the Serpent": 3.0, "Ring of the Snake": 3.0,
+    "Busted Crown": 1.0, "Mark of Pain": 1.5, "SlaversCollar": 0.5,
+    "Coffee Dripper": 0.8, "Sozu": 0.8,
+}
 
 def relic_syn(card_id, relics):
     b = 0.0
@@ -314,6 +412,9 @@ def monster_intent_damage(m):
 
 def estimated_attack(card, player):
     dmg, hits, blk, tag = card_info(card)
+    cid = card.get("id") or ""
+    if cid == "Body Slam":
+        dmg = (player.get("block") or 0)  # damage equals current block
     if dmg <= 0:
         return 0
     strn = power_amount(player.get("powers"), "Strength")
@@ -508,11 +609,11 @@ def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks
         return None
     cands.sort(key=lambda t: -t[0])
     score, cmd, reason = cands[0]
-    bar = 8 if easy_fight else (3 if "BOSS" in room_u else (4 if is_elite_or_boss(g) else 5))
+    bar = 6 if easy_fight else (2 if "BOSS" in room_u else (3 if is_elite_or_boss(g) else 5))
     if hp_frac <= 0.3:
         bar = 0  # about to die: any potion that helps, now
     if (g.get("floor") or 0) >= 13 and "BOSS" not in room_u and not is_elite_or_boss(g):
-        bar += 2  # pre-boss floors: hoard resources for the act boss
+        bar += 1  # pre-boss floors: mild hoarding for the act boss
     if score >= bar:
         log("potion: %s (value %.0f, bar %d)" % (reason, score, bar))
         return cmd
@@ -636,13 +737,19 @@ def combat_action(state, avail_u):
                 threat = max(mons, key=lambda rm: (rm[1].get("current_hp") or 0))
                 return "PLAY %d %d" % (i, threat[0])
 
-    # 7. biggest attack, avoid dumping into heavy block; AOE first vs split boss
+    # 7. biggest attack, avoid dumping into heavy block; AOE first vs wide boards
     if attacks:
         if (g.get("act_boss") or "") == "Slime Boss" and len(mons) >= 2:
             aoe = [p for p in attacks if (p[1].get("id") or "") in BOSS_AOE]
             if aoe:
                 i, c = aoe[0]
                 return "PLAY %d 0" % i
+        if len(mons) >= 3:
+            # act-2 packs: hitting every body once beats single-target damage
+            aoe = [p for p in attacks if (p[1].get("id") or "") in AOE_ATTACKS]
+            if aoe:
+                best_aoe = max(aoe, key=lambda p: estimated_attack(p[1], player))
+                return "PLAY %d 0" % best_aoe[0]
         best = max(attacks, key=lambda p: (estimated_attack(p[1], player), -p[1].get("cost", 0)))
         dmg = estimated_attack(best[1], player)
         targets = [(ri, m) for ri, m in mons if (m.get("block") or 0) < dmg]
@@ -727,6 +834,23 @@ def grid_action(state, avail_u):
                 return "CHOOSE %d" % i
     return "CHOOSE 0"
 
+def boss_reward_action(state, avail_u):
+    """Pick the best act-boss relic (engine relics > stats > rest-hostile)."""
+    ss = scr(state)
+    relics = ss.get("relics") or []
+    ch = [str(c) for c in choices(state)]
+    if not ch:
+        return "CHOOSE 0"
+    best_i, best_s, best_id = 0, -1.0, "?"
+    for i in range(len(ch)):
+        rid = (relics[i].get("id") or "") if i < len(relics) else ""
+        s = BOSS_RELIC_TIER.get(rid, 2.0)  # unknown relic: assume average
+        if s > best_s:
+            best_i, best_s, best_id = i, s, rid
+    log("boss relic: take %s (tier %.1f) of %s" % (
+        best_id, best_s, [r.get("id") for r in relics] or ch))
+    return "CHOOSE %d" % best_i
+
 def shop_action(state, avail_u, ctx):
     """Spend gold: purge bloat > relic deals > cards by tier+synergy > potions."""
     g = gs(state)
@@ -738,6 +862,13 @@ def shop_action(state, avail_u, ctx):
     purge_cost = ss.get("purge_cost") or 75
     ch = [str(c).lower() for c in choices(state)]  # card choices are lowercased by the mod
     if not ch:
+        return "PROCEED"
+    if ch == ["shop"]:
+        # shop room with the merchant unopened: enter once per floor
+        if ctx.shop_entered_floor != ctx.floor:
+            ctx.shop_entered_floor = ctx.floor
+            log("shop room: entering merchant (floor %s)" % ctx.floor)
+            return "CHOOSE 0"
         return "PROCEED"
     log("shop: gold=%d purge=%s(%s) cards=%s relics=%s potions=%s" % (
         gold, ss.get("purge_available"), purge_cost,
@@ -849,13 +980,15 @@ def rest_action(state, avail_u):
     key_left = [c.get("id") for c in deck
                 if (c.get("id") in UPGRADE_PRIORITY[:18])
                 and (c.get("upgrades") or 0) == 0]
-    smith_v = 0.25
+    smith_v = 0.15  # nothing key left: heal beats a sidegrade upgrade
     if key_left:
         smith_v += 0.15 + min(0.10, 0.03 * len(key_left))
     if act == 1:
         smith_v += 0.05
+    if act >= 2:
+        rest_v += 0.06  # act-2 chip damage snowballs; rest a bit more
 
-    if frac <= 0.45:
+    if frac <= (0.5 if act >= 2 else 0.45):
         decision = "rest"
     else:
         decision = "rest" if rest_v >= smith_v else "smith"
@@ -905,7 +1038,10 @@ def map_action(state, avail_u):
     if (g.get("act") or 1) == 1:
         elite_ready = frac >= 0.85 and deck_power >= 8  # act-1 elites eat weak decks
     else:
-        elite_ready = frac >= 0.80 and deck_power >= 6
+        elite_ready = frac >= 0.85 and deck_power >= 8  # act-2 elites are lethal
+    act = g.get("act") or 1
+    boss_floor = {1: 16, 2: 33, 3: 51}.get(act, 16)
+    pre_boss = floor >= boss_floor - 4
 
     def nscore(sym):
         if sym == "R":
@@ -914,8 +1050,8 @@ def map_action(state, avail_u):
             if frac < 0.55:
                 return 3.0
             if frac < 0.7:
-                return 3.0 if floor >= 12 else 2.6  # pre-boss: heal up hard
-            return 2.6 if floor >= 13 else 2.0
+                return 3.2 if pre_boss else 2.6  # pre-boss: heal up hard
+            return (2.8 if pre_boss else 2.0) if act >= 2 else (2.6 if floor >= 13 else 2.0)
         if sym == "M":
             w = 1.4 if deck_size < 18 else 1.0
             if frac < 0.25:
@@ -933,7 +1069,11 @@ def map_action(state, avail_u):
         if sym == "$":
             if frac < 0.35:
                 return -2.0  # gold can't save a dead run
-            return 1.6 if gold >= 150 else -0.5
+            if gold >= 250:
+                return 2.6  # shops convert hoarded gold into deck power now
+            if gold >= 150:
+                return 1.8
+            return -0.5
         if sym == "E":
             if elite_ready:
                 return 2.0  # relic worth it only with a deck that can fight
@@ -994,6 +1134,10 @@ class Ctx(object):
     potion_attempted = False
     floor = None
     match_flips = 0      # "Match and Keep!" 事件翻牌计数
+    shop_entered_floor = None  # 商店每层只进一次
+    start_fail = 0       # START 命令连续失败次数（职业未解锁等）
+    start_fallback = False
+    stuck = 0            # 无指令可发的状态计数（过场/弹窗卡住）
 
 def combat_reward_action(state, ctx):
     g = gs(state)
@@ -1051,8 +1195,9 @@ def pick_command(state, ctx):
         has_save = bool(glob.glob(r"D:\Steam\steamapps\common\SlayTheSpire\saves\*.autosave"))
         if mode == "continue" and has_save and ctx.menu_seen <= 5:
             return RESUME_CLICK
-        log("menu: START IRONCLAD (menu_seen=%d has_save=%s)" % (ctx.menu_seen, has_save))
-        return "START IRONCLAD"
+        char = "IRONCLAD" if ctx.start_fallback else desired_character()
+        log("menu: START %s (menu_seen=%d has_save=%s)" % (char, ctx.menu_seen, has_save))
+        return "START %s" % char
 
     # 对对碰！(Match and Keep)：CommunicationMod 对该事件状态不完整，
     # 逐张翻牌把事件推进完（按键位循环，尽量多配对）
@@ -1064,10 +1209,25 @@ def pick_command(state, ctx):
             return "CHOOSE %d" % idx
         return "KEY Cancel"
     if any(a.upper() == "CHOOSE" for a in avail_u):
+        ctx.stuck = 0
         if st == "MAP":
             return map_action(state, avail_u)
         if st == "COMBAT_REWARD":
             return combat_reward_action(state, ctx)
+        if st == "BOSS_REWARD":
+            return boss_reward_action(state, avail_u)
+        if st == "SHOP_ROOM":
+            # standing in the shop room: 'shop' opens the merchant, but only
+            # once per floor (after leaving, the choice reappears)
+            ch = [str(c).lower() for c in choices(state)]
+            if "shop" in ch and ctx.shop_entered_floor != ctx.floor:
+                ctx.shop_entered_floor = ctx.floor
+                log("shop room: entering merchant (floor %s)" % ctx.floor)
+                return "CHOOSE %d" % ch.index("shop")
+            for a in avail_u:
+                if a.upper() in ("PROCEED", "CONFIRM"):
+                    return a.upper()
+            return "PROCEED"
         if "SHOP" in st or "SHOP" in room:
             return shop_action(state, avail_u, ctx)
         if st == "GRID":
@@ -1089,15 +1249,29 @@ def pick_command(state, ctx):
         cmd = combat_action(state, avail_u)
         if cmd:
             return cmd
+        if not (gs(state).get("combat_state") or {}).get("monsters"):
+            # 'end' listed but no fight: post-room overlay is blocking
+            ctx.stuck += 1
+            if ctx.stuck % 5 == 1:
+                return "KEY CANCEL"
+            return "WAIT 60"
 
     if "END" in avail_up:
         return "END"
     for a in avail_up:
         if a in ("PROCEED", "CONFIRM"):
-            return "PROCEED"
+            return a
     for a in avail_up:
         if a in ("RETURN", "SKIP", "CANCEL", "LEAVE"):
-            return "RETURN"
+            return a
+    # no actionable command but in-game and room finished: a story splash or
+    # deck-view overlay is blocking us (seen after act-boss kills) -> dismiss
+    if (state.get("in_game")
+            and (gs(state).get("room_phase") or "").upper() == "COMPLETE"
+            and not (gs(state).get("combat_state") or {}).get("monsters")):
+        ctx.stuck += 1
+        if ctx.stuck % 5 == 1:
+            return "KEY CANCEL"  # paced: 1 dismiss per ~5 idle states
     for a in avail_up:
         if a == "WAIT":
             return "WAIT 60"
@@ -1162,6 +1336,15 @@ def main():
             ctx.card_reward_done = False
             ctx.potion_attempted = False
             ctx.match_flips = 0
+            ctx.stuck = 0
+
+        # START rejected 3x: class is probably locked -> fall back to IRONCLAD
+        if state.get("error") and cmd and str(cmd).upper().startswith("START"):
+            ctx.start_fail += 1
+            if ctx.start_fail >= 3 and not ctx.start_fallback:
+                ctx.start_fallback = True
+                log("START failed %dx (class locked?), falling back to IRONCLAD"
+                    % ctx.start_fail)
 
         if screen_type(state) == "NONE" and (gs(state).get("combat_state") or {}).get("monsters"):
             mons_dbg = ",".join("%s(%d/%d)" % (m.get("id") or "?", m.get("current_hp") or 0, m.get("max_hp") or 0)
