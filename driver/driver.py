@@ -1059,6 +1059,10 @@ def card_reward_action(state, avail_u):
                        and (c.get("id") or "") not in BASIC
                        and CARD_DB.get(c.get("id") or "", (0,))[0] >= 8)
     attack_boost = 0.6 if (real_attacks < 4 and len(deck) < 20) else 0.0
+    # attacks keep a lower bar than the dilution guard: a deck that blocks well
+    # but cannot out-damage the boss loses the long fight (3 straight Ironclad
+    # boss losses with block-heavy drafts)
+    attack_bar = max(1.5 if len(deck) < 14 else 2.0, threshold - 0.6)
     best_i, best_score = None, threshold
     for i, name in enumerate(ch):
         cid = id_of.get(name)
@@ -1066,9 +1070,11 @@ def card_reward_action(state, avail_u):
             continue
         score = (CARD_TIER.get(cid, 1) + synergy_bonus(cid, deck_ids)
             + relic_syn(cid, relic_id_list(g)) + boss_syn(cid, g.get("act_boss") or ""))
-        if attack_boost and "attack" in type_of.get(name, ""):
+        is_atk = "attack" in type_of.get(name, "")
+        if is_atk and attack_boost:
             score += attack_boost
-        if score > best_score:
+        bar = min(threshold, attack_bar) if is_atk else threshold
+        if score > bar and (best_i is None or score > best_score):
             best_i, best_score = i, score
     log("reward debug: ch=%s ids=%s thr=%.1f deck=%d" % (
         list(ch), [c.get("id") for c in cards], threshold, len(deck)))
