@@ -960,6 +960,16 @@ def combat_action(state, avail_u):
         if good:
             return play_card(good[0][0], good[0][1])
 
+    # 5b. Defect orb setup: Zap/Dualcast deal no damage on cast (channel/evoke)
+    # so the value tables skip them; play them while safe or the energy is
+    # simply wasted every turn of act 1
+    if residual < threshold and (g.get("class") or "").upper() == "DEFECT":
+        has_orb = bool(player.get("orbs"))
+        for i, c in skills:
+            cid = c.get("id") or ""
+            if cid == "Zap" or (cid == "Dualcast" and has_orb):
+                return play_card(i, c)
+
     # 6. poison on long fights; commit harder when the deck is a poison build
     deck_ids = [c.get("id") for c in (g.get("deck") or [])]
     poison_build = sum(1 for c in deck_ids if c in POISON_CORE) >= 3
