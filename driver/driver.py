@@ -246,21 +246,21 @@ CARD_TIER = {
     "Deflect": 1.5, "Flying Knee": 2.2, "Riddle with Holes": 2,
     "Storm of Steel": 2.5, "Infinite Blades": 2.5,
     # Defect
-    "Ball Lightning": 2.5, "Cold Snap": 2.2, "Coolheaded": 2.2,
-    "Compile Driver": 2, "Go for the Eyes": 2, "Beam Cell": 1.5,
-    "Rip and Tear": 2, "Sweeping Beam": 2, "Charge Battery": 2.5,
-    "Glacier": 2.5, "Hologram": 2, "Rebound": 2,
+    "Ball Lightning": 3.0, "Cold Snap": 2.6, "Coolheaded": 2.0,
+    "Compile Driver": 2.5, "Go for the Eyes": 2.2, "Beam Cell": 1.8,
+    "Rip and Tear": 2.6, "Sweeping Beam": 2.2, "Charge Battery": 2.2,
+    "Glacier": 2.2, "Hologram": 2, "Rebound": 2.3,
     "Hyperbeam": 3, "Multi-Cast": 3, "Creative AI": 3, "All For One": 2.5,
-    "Equilibrium": 2, "Loop": 2.5, "Capacitor": 2, "Auto-Shields": 2,
+    "Equilibrium": 1.8, "Loop": 2.5, "Capacitor": 2, "Auto-Shields": 1.8,
     "Defragment": 3.5, "Biased Cognition": 3, "Buffer": 3,
     "Blizzard": 2.5, "Tempest": 2.5, "Force Field": 2.5,
     "Genetic Algorithm": 2.5, "Self Repair": 2.5, "Chill": 2.5,
     "Static Discharge": 2.5, "Rainbow": 2.5, "Reboot": 2.5,
     "Core Surge": 2.5, "Fission": 2, "Double Energy": 2.5,
-    "Amplify": 2.5, "Consume": 2, "Doom and Gloom": 2, "Melter": 2,
-    "Sunder": 2, "Streamline": 2, "FTL": 2, "Claw": 2,
-    "Bullseye": 2, "Blitz": 1.5, "Scrape": 1.5, "Steam Barrier": 1.5,
-    "Leap": 1.5, "Storm": 2, "Darkness": 2, "White Noise": 2,
+    "Amplify": 2.5, "Consume": 2, "Doom and Gloom": 2.6, "Melter": 2.4,
+    "Sunder": 2.6, "Streamline": 2.3, "FTL": 2.4, "Claw": 2.2,
+    "Bullseye": 2.4, "Blitz": 1.5, "Scrape": 1.5, "Steam Barrier": 1.2,
+    "Leap": 1.2, "Storm": 2, "Darkness": 2, "White Noise": 2,
     "Hello World": 2, "Skim": 2, "Overclock": 1.5, "Recursion": 1.5,
     "Fusion": 1.5, "Heatsinks": 1.5, "Reprogram": 1.5,
     # Watcher
@@ -1033,8 +1033,17 @@ def card_reward_action(state, avail_u):
     if len(deck) >= 20:
         threshold = max(threshold, 3.0)
     id_of = {}
+    type_of = {}
     for c in cards:
         id_of[c.get("name")] = c.get("id")
+        type_of[c.get("name")] = (c.get("type") or "").lower()
+    # damage-density guard: a deck with almost no real attacks cannot kill an
+    # act-1 boss no matter how well it blocks (Defect lost a 240hp fight at 1hp)
+    real_attacks = sum(1 for c in deck
+                       if "attack" in (c.get("type") or "").lower()
+                       and (c.get("id") or "") not in BASIC
+                       and CARD_DB.get(c.get("id") or "", (0,))[0] >= 8)
+    attack_boost = 0.6 if (real_attacks < 4 and len(deck) < 20) else 0.0
     best_i, best_score = None, threshold
     for i, name in enumerate(ch):
         cid = id_of.get(name)
@@ -1042,6 +1051,8 @@ def card_reward_action(state, avail_u):
             continue
         score = (CARD_TIER.get(cid, 1) + synergy_bonus(cid, deck_ids)
             + relic_syn(cid, relic_id_list(g)) + boss_syn(cid, g.get("act_boss") or ""))
+        if attack_boost and "attack" in type_of.get(name, ""):
+            score += attack_boost
         if score > best_score:
             best_i, best_score = i, score
     log("reward debug: ch=%s ids=%s thr=%.1f deck=%d" % (
