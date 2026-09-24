@@ -623,7 +623,9 @@ def living_monsters(state):
 # Cards we KNOW change stance; the driver tracks the belief across its own
 # plays so Wrath's damage doubling can be respected.
 STANCE_WRATH_CARDS = {"Eruption", "Tantrum", "Crescendo", "Wrathful Stand"}
-STANCE_CALM_CARDS = {"Tranquility", "Inner Peace", "Fear No Evil", "Calm"}
+# Vigilance is the Watcher STARTER's only calm exit: without it the tracker
+# believed the run sat in Wrath forever and ate doubled hits to death
+STANCE_CALM_CARDS = {"Vigilance", "Tranquility", "Inner Peace", "Fear No Evil", "Calm"}
 SHADOW_STANCE = [None]  # None / "WRATH" / "CALM" / "DIVINITY"
 
 def note_stance_card(cid):
@@ -879,6 +881,15 @@ def combat_action(state, avail_u):
     # Blasphemy kills us at the start of next turn unless it ends the fight:
     # only the lethal branch above may ever play it
     attacks = [p for p in attacks if (p[1].get("id") or "") != "Blasphemy"]
+
+    # Watcher: entering Wrath doubles ALL incoming damage. When hurt and facing
+    # a real hit, wrath entries are suicide unless the play kills this turn
+    # (the lethal branch above already handled that case).
+    if ((g.get("class") or "").upper() == "WATCHER"
+            and SHADOW_STANCE[0] != "WRATH"
+            and hp_frac < 0.55 and incoming >= 12):
+        attacks = [p for p in attacks
+                   if (p[1].get("id") or "") not in STANCE_WRATH_CARDS]
 
     # 0b. unified potion valuation (all potions, all contexts)
     if "Sozu" not in relic_id_list(g):
