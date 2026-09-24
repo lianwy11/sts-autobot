@@ -831,6 +831,10 @@ def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks
 
 def combat_action(state, avail_u):
     g = gs(state)
+    # stances only exist for the Watcher: never let a stale belief from another
+    # class's run (or a driver session switch) leak into this run
+    if (g.get("class") or "").upper() != "WATCHER":
+        SHADOW_STANCE[0] = None
     combat = g.get("combat_state") or {}
     hand = combat.get("hand") or []
     player = combat.get("player") or {}
