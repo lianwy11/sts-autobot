@@ -818,6 +818,13 @@ def grid_action(state, avail_u):
     room = (gs(state).get("room_type") or "").upper()
     cards = scr(state).get("cards") or []
     ch = choices(state)
+    # after a card is selected the grid waits for a confirm; choices may be
+    # empty or stale then, and re-CHOOSING cancels the whole selection
+    if (scr(state).get("selected_cards")
+            or (not ch and any(a.upper() == "CONFIRM" for a in avail_u))):
+        for a in avail_u:
+            if a.upper() == "CONFIRM":
+                return a.upper()
     if not ch:
         return "CHOOSE 0"
     prio = UPGRADE_PRIORITY if "REST" in room else REMOVE_PRIORITY
@@ -890,12 +897,15 @@ def shop_action(state, avail_u, ctx):
     relics_held = relic_id_list(g)
 
     # 1. purge first: removing Strikes/curses improves every future draw
-    if "purge" in ch and gold >= purge_cost + 90:
+    #    (once per floor: a failed purge flow must not loop)
+    if ("purge" in ch and gold >= purge_cost + 90
+            and ctx.purge_attempted_floor != ctx.floor):
         junk = [c for c in deck_ids
                 if c in REMOVE_PRIORITY or (c or "").startswith("Curse")]
         if junk or len(deck) >= 15:
             cmd = buy("purge", "thin deck (%s)" % (junk[0] if junk else "size"))
             if cmd:
+                ctx.purge_attempted_floor = ctx.floor
                 return cmd
 
     # 2. relic deals that don't bankrupt us
@@ -940,8 +950,8 @@ def shop_action(state, avail_u, ctx):
             return a.upper()
     for a in avail_u:
         if a.upper() in ("PROCEED", "CONFIRM"):
-            return "PROCEED"
-    return "CHOOSE 1"
+            return a.upper()
+    return "KEY CANCEL"  # merchant with no leave button: ESC closes it
 
 
 def rest_action(state, avail_u):
@@ -1135,6 +1145,7 @@ class Ctx(object):
     floor = None
     match_flips = 0      # "Match and Keep!" 事件翻牌计数
     shop_entered_floor = None  # 商店每层只进一次
+    purge_attempted_floor = None  # 删卡每层只买一次（防死循环）
     start_fail = 0       # START 命令连续失败次数（职业未解锁等）
     start_fallback = False
     stuck = 0            # 无指令可发的状态计数（过场/弹窗卡住）
@@ -1237,10 +1248,12 @@ def pick_command(state, ctx):
                 if a.upper() in ("PROCEED", "CONFIRM"):
                     return a.upper()
             return "PROCEED"
-        if "SHOP" in st or "SHOP" in room:
-            return shop_action(state, avail_u, ctx)
+        # GRID before the shop-room catch: purge opens a GRID while room_type
+        # is still ShopRoom, and shop_action must not steal those states
         if st == "GRID":
             return grid_action(state, avail_u)
+        if "SHOP" in st or "SHOP" in room:
+            return shop_action(state, avail_u, ctx)
         if st == "CARD_REWARD":
             ctx.card_reward_done = True  # decided (take or skip): don't reopen
             return card_reward_action(state, avail_u)
