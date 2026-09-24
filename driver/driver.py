@@ -822,14 +822,19 @@ def card_reward_action(state, avail_u):
     return "RETURN"
 
 def grid_action(state, avail_u):
-    # GRID = smith upgrade (RestRoom) or purge (shop/events)
+    # GRID = smith upgrade (RestRoom), purge (shop/events), or a multi-select
+    # like Astrolabe ("transform 3 cards") after the act-boss relic pick
     room = (gs(state).get("room_type") or "").upper()
-    cards = scr(state).get("cards") or []
-    ch = choices(state)
-    # after a card is selected the grid waits for a confirm; choices may be
-    # empty or stale then, and re-CHOOSING cancels the whole selection
-    if (scr(state).get("selected_cards")
-            or (not ch and any(a.upper() == "CONFIRM" for a in avail_u))):
+    ss = scr(state)
+    cards = ss.get("cards") or []
+    ch = [str(c) for c in choices(state)]
+    selected = ss.get("selected_cards") or []
+    need = ss.get("num_cards") or 1
+
+    # all selections made (or a confirm-only screen): confirm, never re-click
+    # (clicking a chosen card again DEselects it and the grid never completes)
+    if (selected and len(selected) >= need) or (
+            not ch and any(a.upper() == "CONFIRM" for a in avail_u)):
         for a in avail_u:
             if a.upper() == "CONFIRM":
                 return a.upper()
@@ -841,12 +846,25 @@ def grid_action(state, avail_u):
         if cid in prio:
             return prio.index(cid)
         return len(prio)
-    if cards:
-        best = min(cards, key=rank)
-        for i, name in enumerate(ch):
-            if name == best.get("name"):
-                log("grid(%s): pick '%s'" % ("smith" if "REST" in room else "purge", best.get("id")))
-                return "CHOOSE %d" % i
+    # pick the best card not yet selected; with duplicate names click the
+    # next unused occurrence so repeated strikes each get their own click
+    sel_names = [str(c.get("name")) for c in selected]
+    from collections import Counter
+    sel_count = Counter(sel_names)
+    for best in sorted(cards, key=rank):
+        nm = str(best.get("name"))
+        seen = 0
+        for i, cand in enumerate(ch):
+            if cand == nm:
+                if seen == sel_count.get(nm, 0):
+                    log("grid(%s): select '%s' (%d/%d)"
+                        % ("smith" if "REST" in room else "purge/transform",
+                           best.get("id"), len(selected) + 1, need))
+                    return "CHOOSE %d" % i
+                seen += 1
+    for a in avail_u:
+        if a.upper() == "CONFIRM":
+            return a.upper()
     return "CHOOSE 0"
 
 def boss_reward_action(state, avail_u):
