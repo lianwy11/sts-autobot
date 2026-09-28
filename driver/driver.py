@@ -1010,6 +1010,9 @@ def combat_action(state, avail_u):
     mon_ids = "|".join((m.get("id") or "") + (m.get("name") or "") for _, m in mons)
     if "GremlinNob" in mon_ids or "地精大汉" in mon_ids:
         threshold = 4  # enrage adds +2 str/skill, but unblocked 20-dmg turns kill
+    elif all("Cultist" in (m.get("id") or "") for _, m in mons) and len(mons) >= 2 \
+            and (combat.get("turn") or 1) <= 3:
+        threshold = 99  # ritual cultists scale past any wall: all-in damage early
     elif "GiantHead" in mon_ids or "巨口" in mon_ids:
         # Giant Head: "It's time!" lands on turn 5 for 30-65; after turn 3 we
         # must race it or wall up (killed the floor-45 Defect run)
