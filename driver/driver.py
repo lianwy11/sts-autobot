@@ -459,6 +459,7 @@ def boss_syn(card_id, boss):
 # ones (Sozu/Coffee Dripper) last. Keys are English relic ids.
 BOSS_RELIC_TIER = {
     "Snecko Eye": 5.0, "Runic Pyramid": 4.5, "Pandora's Box": 4.5,
+    "Black Blood": 4.0, "Ring of the Wolf": 3.0, "Golden Idol": 2.5,
     "Astrolabe": 4.0, "Sacred Bark": 3.5, "Philosopher's Stone": 3.5,
     "Wrist Blade": 3.5, "Black Star": 3.0, "Velvet Choker": 3.0,
     "Tiny House": 3.0, "Runic Dome": 2.5, "Ectoplasm": 2.0,
