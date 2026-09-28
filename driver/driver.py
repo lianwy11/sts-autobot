@@ -943,12 +943,13 @@ def combat_action(state, avail_u):
     # only the lethal branch above may ever play it
     attacks = [p for p in attacks if (p[1].get("id") or "") != "Blasphemy"]
 
-    # Watcher: entering Wrath doubles ALL incoming damage. Regular fights with
-    # real attackers don't pay for that trade (Jaw Worm bit 22 through Wrath):
-    # only enter Wrath when healthy, or in elite/boss fights worth the burst
+    # Watcher: entering Wrath doubles ALL incoming damage. In regular fights
+    # only burst on free turns (enemy not attacking at all) while healthy; in
+    # elite/boss fights the damage race is worth it (a floor-4 Looter bit 20
+    # through a turn-end Wrath).
     if ((g.get("class") or "").upper() == "WATCHER"
             and SHADOW_STANCE[0] != "WRATH"):
-        skip_wrath = ((not big_fight and incoming >= 10 and hp_frac < 0.85)
+        skip_wrath = ((not big_fight and incoming > 0)
                       or (hp_frac < 0.55 and incoming >= 12))
         if skip_wrath:
             attacks = [p for p in attacks
@@ -994,12 +995,15 @@ def combat_action(state, avail_u):
             log("desperation: hp %d vs %d incoming -> block" % (hp, incoming))
             return play_card(blk_all[0][0], blk_all[0][1])
 
-    # 2d. Watcher: leaving Wrath before a doubled hit beats blocking half of it
-    if SHADOW_STANCE[0] == "WRATH" and residual >= max(6, int(hp * 0.2)):
-        for i, c in skills:
-            if (c.get("id") or "") in STANCE_CALM_CARDS:
-                log("wrath exit: %d doubled incoming -> calm" % incoming)
-                return play_card(i, c)
+    # 2d. Watcher: never end a turn in Wrath facing an attack (each hit is
+    # doubled); the lethal branch above already ran, so calm-exit whenever a
+    # calm card is playable — even small hits doubled are how runs bleed out
+    if SHADOW_STANCE[0] == "WRATH" and incoming > 0:
+        calms = [(i, c) for i, c in skills
+                 if (c.get("id") or "") in STANCE_CALM_CARDS]
+        if calms:
+            log("wrath exit: %d doubled incoming -> calm" % incoming)
+            return play_card(*calms[0])
 
     # 3. block policy: bosses near-full block, elites/boss 4, else 6
     #    (a chipped deck in act 1 blocks one point earlier to stop attrition)
