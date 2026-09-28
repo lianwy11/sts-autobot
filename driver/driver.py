@@ -1248,10 +1248,19 @@ def boss_reward_action(state, avail_u):
     ch = [str(c) for c in choices(state)]
     if not ch:
         return "CHOOSE 0"
+    cls = ((gs(state).get("class") or "") + "").upper()
+    # act-3 class relics: engine pieces for their owner, average otherwise
+    CLASS_RELIC_TIER = {
+        "DEFECT": {"Nuclear Battery": 4.0},
+        "THE_SILENT": {"Violet Lotus": 3.5},
+        "WATCHER": {"Holy Water": 3.5},
+        "IRONCLAD": {},
+    }
+    class_tier = CLASS_RELIC_TIER.get(cls, {})
     best_i, best_s, best_id = 0, -1.0, "?"
     for i in range(len(ch)):
         rid = (relics[i].get("id") or "") if i < len(relics) else ""
-        s = BOSS_RELIC_TIER.get(rid, 2.0)  # unknown relic: assume average
+        s = class_tier.get(rid, BOSS_RELIC_TIER.get(rid, 2.0))
         if s > best_s:
             best_i, best_s, best_id = i, s, rid
     log("boss relic: take %s (tier %.1f) of %s" % (
