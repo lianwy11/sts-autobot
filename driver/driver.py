@@ -65,6 +65,8 @@ RESUME_CLICK = "CLICK LEFT 205 631"
 # 旧值 (240,660) 会落在"放弃当前游戏"上，触发放弃确认框毁掉存档。
 # 对话框的"否"按钮：桌面 (1026,665) → 逻辑 (1054,688)
 DIALOG_NO_CLICK = "CLICK LEFT 1054 688"
+# 对话框的"是"按钮：桌面 (890,665) → 逻辑 (850,688)（mode=new 放弃存档时用）
+DIALOG_YES_CLICK = "CLICK LEFT 850 688"
 
 RAW_IN = sys.stdin.buffer
 try:
@@ -441,6 +443,9 @@ def boss_syn(card_id, boss):
     elif boss == "The Guardian":
         if card_id in BOSS_BLOCK or card_id in STR_GAIN or card_id in MULTIHIT:
             b += 0.5
+    boss_l = (boss or "").lower()
+    if "donu" in boss_l and card_id in AOE_ATTACKS:
+        b += 0.75  # the twin left alive gains Strength; kill both together
     return b
 
 # Act-boss relic pick after floor 16/33/51: engine relics first, rest-hostile
@@ -627,6 +632,7 @@ STANCE_WRATH_CARDS = {"Eruption", "Tantrum", "Crescendo", "Wrathful Stand"}
 # believed the run sat in Wrath forever and ate doubled hits to death
 STANCE_CALM_CARDS = {"Vigilance", "Tranquility", "Inner Peace", "Fear No Evil", "Calm"}
 SHADOW_STANCE = [None]  # None / "WRATH" / "CALM" / "DIVINITY"
+TIME_EATER = {"turn": None, "plays": 0}  # act-3 boss play counter
 
 def note_stance_card(cid):
     if cid in STANCE_WRATH_CARDS:
@@ -836,6 +842,15 @@ def combat_action(state, avail_u):
     if (g.get("class") or "").upper() != "WATCHER":
         SHADOW_STANCE[0] = None
     combat = g.get("combat_state") or {}
+    # Time Eater gains +3 Strength on the 10th card played each turn: hard-cap
+    # our own plays at 9 (every card counts, including blocks/draw skills)
+    if "time" in (g.get("act_boss") or "").lower():
+        turn = combat.get("turn")
+        if turn != TIME_EATER["turn"]:
+            TIME_EATER["turn"] = turn
+            TIME_EATER["plays"] = 0
+        if TIME_EATER["plays"] >= 9:
+            return "END"
     hand = combat.get("hand") or []
     player = combat.get("player") or {}
     mons = alive_monsters(combat)
@@ -971,9 +986,12 @@ def combat_action(state, avail_u):
 
     # 5. develop powers when safe
     if residual < threshold and powers:
-        good = [(i, c) for i, c in powers if card_info(c)[3] in ("buff", "energy")]
-        if good:
-            return play_card(good[0][0], good[0][1])
+        # Awakened One gains +3 Strength per Power played: skip the auto-power
+        # step against it (an engine power is rarely worth feeding the boss)
+        if "awaken" not in (g.get("act_boss") or "").lower():
+            good = [(i, c) for i, c in powers if card_info(c)[3] in ("buff", "energy")]
+            if good:
+                return play_card(good[0][0], good[0][1])
 
     # 5b. Defect orb setup: Zap/Dualcast deal no damage on cast (channel/evoke)
     # so the value tables skip them; play them while safe or the energy is
@@ -996,11 +1014,18 @@ def combat_action(state, avail_u):
 
     # 7. biggest attack, avoid dumping into heavy block; AOE first vs wide boards
     if attacks:
-        if (g.get("act_boss") or "") == "Slime Boss" and len(mons) >= 2:
+        boss_l = (g.get("act_boss") or "").lower()
+        if "slime boss" in boss_l and len(mons) >= 2:
             aoe = [p for p in attacks if (p[1].get("id") or "") in BOSS_AOE]
             if aoe:
                 i, c = aoe[0]
                 return "PLAY %d 0" % i
+        # Donu & Deca: the surviving twin gains Strength - keep their HPs even
+        if "donu" in boss_l and len(mons) >= 2:
+            aoe = [p for p in attacks if (p[1].get("id") or "") in AOE_ATTACKS]
+            if aoe:
+                best_aoe = max(aoe, key=lambda p: estimated_attack(p[1], player))
+                return "PLAY %d 0" % best_aoe[0]
         if len(mons) >= 3:
             # act-2 packs: hitting every body once beats single-target damage
             aoe = [p for p in attacks if (p[1].get("id") or "") in AOE_ATTACKS]
@@ -1071,6 +1096,9 @@ def card_reward_action(state, avail_u):
         score = (CARD_TIER.get(cid, 1) + synergy_bonus(cid, deck_ids)
             + relic_syn(cid, relic_id_list(g)) + boss_syn(cid, g.get("act_boss") or ""))
         is_atk = "attack" in type_of.get(name, "")
+        if (g.get("act_boss") and "awaken" in g.get("act_boss").lower()
+                and "power" in type_of.get(name, "")):
+            score -= 0.75  # Awakened One feeds on our Powers (+3 str each)
         if is_atk and attack_boost:
             score += attack_boost
         bar = min(threshold, attack_bar) if is_atk else threshold
@@ -1451,6 +1479,9 @@ class Ctx(object):
     last_start_class = None
     runs_started = 0     # ROTATE 轮换计数
     start_sent = False   # 本次菜单会话只发一次 START
+    new_abandons = 0     # mode=new 放弃确认框交互计数
+    te_turn = None       # Time Eater: 本回合已打出的牌数（第 10 张会 +3 力量）
+    te_plays = 0
     stuck = 0            # 无指令可发的状态计数（过场/弹窗卡住）
 
 def combat_reward_action(state, ctx):
@@ -1515,7 +1546,15 @@ def pick_command(state, ctx):
                 return DIALOG_NO_CLICK
             return RESUME_CLICK
         if ctx.start_sent:
-            return "WAIT 60"  # one START per menu session; game is catching up
+            # mode=new with a live save: START pops the "abandon run?" dialog;
+            # confirm 是 and START again until the menu accepts (no run left)
+            if mode == "new" and ctx.menu_seen <= 30:
+                ctx.new_abandons += 1
+                if ctx.new_abandons % 2 == 1:
+                    log("mode=new: confirming abandon dialog")
+                    return DIALOG_YES_CLICK
+                return "START %s" % (ctx.last_start_class or desired_character(ctx))
+            return "WAIT 60"
         ctx.start_fail = 0  # a fresh menu resets the failure streak
         # a class may have been unlocked mid-session (e.g. Silent just beat
         # act 1): retry locked classes once every 8 runs
@@ -1588,13 +1627,16 @@ def pick_command(state, ctx):
     if any(a.upper() == "PLAY" for a in avail_u) or "END" in avail_up:
         cmd = combat_action(state, avail_u)
         if cmd:
-            # record our own stance changes (mod never reports them)
+            # record our own stance changes (mod never reports them) and the
+            # Time Eater per-turn play counter
             if cmd.startswith("PLAY "):
                 try:
                     idx = int(cmd.split()[1]) - 1
                     hand = (gs(state).get("combat_state") or {}).get("hand") or []
                     if 0 <= idx < len(hand):
                         note_stance_card(hand[idx].get("id") or "")
+                    if "time" in (gs(state).get("act_boss") or "").lower():
+                        TIME_EATER["plays"] += 1
                 except Exception:
                     pass
             return cmd
@@ -1676,6 +1718,7 @@ def main():
             if not at_main_menu(state, [str(a) for a in (state.get("available_commands") or [])]):
                 ctx.menu_seen = 0
                 ctx.start_sent = False  # left the menu (or resumed): re-arm
+                ctx.new_abandons = 0
             if "SHOP" not in screen_type(state):
                 ctx.shop_seen = 0
 

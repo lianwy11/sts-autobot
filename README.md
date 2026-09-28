@@ -138,6 +138,19 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_sts_bot.ps1
 
 或用 `scripts/make_shortcut.ps1` 生成桌面快捷方式（一键启动）。
 
+**启动时会先让你选择本局职业**：
+
+```
+=========== 杀戮尖塔代打 - 选择职业 ===========
+  当前设置: DEFECT
+  [1] 铁甲战士 IRONCLAD    [2] 静默猎手 THE_SILENT
+  [3] 机械师   DEFECT      [4] 观战者   WATCHER
+  [5] 每局随机 RANDOM      [6] 每局轮换 ROTATE
+  [回车] 保持当前设置
+```
+
+输入数字回车即写入 `driver/character.txt`；随后若检测到进行中的存档，还会问"继续该存档 / 放弃并用所选职业开新局"（写 `driver/mode.txt`）。选完游戏自动启动并进入自动化对局。
+
 ---
 
 ## 五、使用
@@ -145,9 +158,10 @@ powershell -ExecutionPolicy Bypass -File scripts/launch_sts_bot.ps1
 ### 日常使用
 
 双击桌面快捷方式即可。启动脚本会：
-1. 用游戏自带 JRE 启动 ModTheSpire（`--mods basemod,CommunicationMod,nofocuspause,achievementenabler --skip-intro`）
-2. 检测 MTS 的 Steam 创意工坊子进程（它可能卡住导致游戏起不来）并在其输出完成后结束它
-3. 游戏加载后自动点"继续游戏"或开新局，驱动接管
+1. **先让你选择本局职业**（回车保持上次的设置；检测到存档时会问"继续存档 / 放弃开新局"）
+2. 用游戏自带 JRE 启动 ModTheSpire（`--mods basemod,CommunicationMod,nofocuspause,achievementenabler --skip-intro`）
+3. 检测 MTS 的 Steam 创意工坊子进程（它可能卡住导致游戏起不来）并在其输出完成后结束它
+4. 游戏加载后自动点"继续游戏"或开新局，驱动接管
 
 ### 手动接管
 
