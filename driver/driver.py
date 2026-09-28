@@ -1406,8 +1406,10 @@ def map_action(state, avail_u):
             return w
         if sym == "?":
             w = 1.1 if floor < 12 else 0.8
-            if frac < 0.4:
-                w += 1.0  # events can heal
+            if frac < 0.4 and frac >= 0.25:
+                w += 1.0  # events can heal (while a fight is still winnable)
+            elif frac < 0.25:
+                w -= 1.5  # ? hides ambush fights (died at 13hp to 2 slavers)
             return w
         if sym == "$":
             if frac < 0.35:
@@ -1466,6 +1468,10 @@ def event_action(state, avail_u):
         return "CHOOSE 0"
     prefer = ("最大生命", "遗物", "金币", "获得", "升级", "回血", "移除", "卡牌")
     avoid = ("失去", "诅咒", "死亡", "受到伤害")
+    g = gs(state)
+    hp = g.get("current_hp") or 1
+    max_hp = g.get("max_hp") or 1
+    hp_frac = hp / float(max_hp) if max_hp else 1.0
     best, best_score = 0, -99
     for i, n in enumerate(ch):
         score = 0
@@ -1473,8 +1479,12 @@ def event_action(state, avail_u):
             score += 2
         if any(k in n for k in avoid):
             score -= 3
+            if hp_frac < 0.35:
+                score -= 12  # a hurt run cannot pay HP costs (died picking one)
         if "跳过" in n or "离开" in n:
             score -= 1
+            if hp_frac < 0.35:
+                score += 4  # skipping a risky event beats gambling when hurt
         if score > best_score:
             best, best_score = i, score
     return "CHOOSE %d" % best
