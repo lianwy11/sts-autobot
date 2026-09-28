@@ -330,6 +330,9 @@ UPGRADE_PRIORITY_BY_CLASS = {
         "Go for the Eyes", "Beam Cell", "Strike_B", "Defend_B", "Leap",
     ],
     "WATCHER": [
+        # Eruption/Vigilance first: the starter engine, +5dmg doubles to +10
+        # in Wrath and +3 block on the exit card pays every single turn
+        "Eruption", "Vigilance",
         "Wish", "Vault", "Omniscience", "Rushdown", "Scrawl", "Tantrum",
         "Talk to the Hand", "Mental Fortress", "Lesson Learned",
         "Blasphemy", "Wave of the Hand", "Ragnarök", "Carve Reality",
@@ -337,7 +340,7 @@ UPGRADE_PRIORITY_BY_CLASS = {
         "Sanctity", "Empty Fist", "Conclude", "Flurry of Blows",
         "Crush Joints", "Sash Whip", "Follow-Up", "Flying Sleeves",
         "Fasting", "Meditate", "Deus Ex Machina", "Establishment",
-        "Halt", "Protect", "Eruption", "Vigilance",
+        "Halt", "Protect",
         "Strike_P", "Defend_P",
     ],
 }
