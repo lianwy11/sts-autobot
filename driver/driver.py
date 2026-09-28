@@ -68,6 +68,13 @@ DIALOG_NO_CLICK = "CLICK LEFT 1054 688"
 # 对话框的"是"按钮：桌面 (890,665) → 逻辑 (850,688)（mode=new 放弃存档时用）
 DIALOG_YES_CLICK = "CLICK LEFT 850 688"
 
+# ---- card id normalization ----------------------------------------------
+# Watcher card ids from the mod are camel-case without spaces (FollowUp,
+# EmptyFist), while other cards keep spaces ("Deadly Poison") or hyphens.
+# Normalize BOTH sides: knowledge-table keys and state ids.
+def _norm_id(s):
+    return (s or "").replace(" ", "").replace("-", "")
+
 RAW_IN = sys.stdin.buffer
 try:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -358,6 +365,7 @@ SHIV_CORE = {"Blade Dance", "Cloak and Dagger", "Infinite Blades", "Dead Branch"
              "Storm of Steel"}
 SHIV_PAYOFF = {"After Image", "A Thousand Cuts", "Envenom", "Finisher"}
 DEX_CORE = {"Footwork", "Backflip", "Leg Sweep"}
+EXHAUST_CORE = {"Corruption", "Feel No Pain", "Dark Embrace", "Second Wind"}
 # Defect: frost orbs block, focus multiplies every orb
 FROST_CORE = {"Glacier", "Cold Snap", "Coolheaded", "Tempest", "Blizzard",
               "Auto-Shields", "Fusion", "Chill"}
@@ -399,7 +407,6 @@ def synergy_bonus(card_id, deck_ids):
         b += 1.5
     if card_id in DEX_CORE and n(DEX_CORE) >= 2:
         b += 0.5
-    EXHAUST_CORE = {"Corruption", "Feel No Pain", "Dark Embrace", "Second Wind"}
     if card_id in EXHAUST_CORE and n(EXHAUST_CORE) >= 1:
         b += 1.0
     # Defect frost/focus engine
@@ -472,6 +479,7 @@ def relic_syn(card_id, relics):
     if card_id in STR_GAIN and "Girya" in relics:
         b += 0.5
     return b
+
 
 # Unified potion catalog: every potion as a value source, evaluated per turn.
 POTION_CATALOG = {
@@ -633,6 +641,40 @@ STANCE_WRATH_CARDS = {"Eruption", "Tantrum", "Crescendo", "Wrathful Stand"}
 STANCE_CALM_CARDS = {"Vigilance", "Tranquility", "Inner Peace", "Fear No Evil", "Calm"}
 SHADOW_STANCE = [None]  # None / "WRATH" / "CALM" / "DIVINITY"
 TIME_EATER = {"turn": None, "plays": 0}  # act-3 boss play counter
+
+# Apply id normalization to every knowledge table and pool, once, at load:
+# knowledge keys and state ids then always agree (FollowUp == "Follow-Up").
+CARD_DB = {_norm_id(k): v for k, v in CARD_DB.items()}
+CARD_TIER = {_norm_id(k): v for k, v in CARD_TIER.items()}
+UPGRADE_PRIORITY = [_norm_id(x) for x in UPGRADE_PRIORITY]
+UPGRADE_PRIORITY_BY_CLASS = {c: [_norm_id(x) for x in lst]
+                             for c, lst in UPGRADE_PRIORITY_BY_CLASS.items()}
+REMOVE_PRIORITY = [_norm_id(x) for x in REMOVE_PRIORITY]
+for _pool_name in ("STR_GAIN", "MULTIHIT", "BLOCK_CORE", "POISON_CORE",
+                   "SHIV_CORE", "SHIV_PAYOFF", "DEX_CORE", "EXHAUST_CORE",
+                   "FROST_CORE", "FOCUS_CORE", "STANCE_ENTER", "STANCE_PAYOFF",
+                   "BOSS_AOE", "BOSS_BLOCK", "AOE_ATTACKS",
+                   "STANCE_WRATH_CARDS", "STANCE_CALM_CARDS"):
+    globals()[_pool_name] = set(_norm_id(x) for x in globals()[_pool_name])
+
+def normalize_state_ids(state):
+    """Normalize card ids in the incoming state in place (deck, combat piles,
+    reward/shop/grid cards) so every later lookup hits the normalized tables."""
+    g = state.get("game_state") or {}
+    for c in (g.get("deck") or []):
+        if isinstance(c, dict) and c.get("id"):
+            c["id"] = _norm_id(c["id"])
+    cs = g.get("combat_state") or {}
+    for pile in ("hand", "draw_pile", "discard_pile", "exhaust_pile", "limbo"):
+        for c in (cs.get(pile) or []):
+            if isinstance(c, dict) and c.get("id"):
+                c["id"] = _norm_id(c["id"])
+    ss = g.get("screen_state") or {}
+    for c in (ss.get("cards") or []):
+        if isinstance(c, dict) and c.get("id"):
+            c["id"] = _norm_id(c["id"])
+    return state
+
 
 def note_stance_card(cid):
     if cid in STANCE_WRATH_CARDS:
@@ -1553,6 +1595,7 @@ def combat_reward_action(state, ctx):
     return "PROCEED"
 
 def pick_command(state, ctx):
+    normalize_state_ids(state)
     avail = state.get("available_commands") or []
     if not avail:
         return "STATE"
