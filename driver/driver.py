@@ -962,6 +962,11 @@ def combat_action(state, avail_u):
     mon_ids = "|".join((m.get("id") or "") + (m.get("name") or "") for _, m in mons)
     if "GremlinNob" in mon_ids or "地精大汉" in mon_ids:
         threshold = 4  # enrage adds +2 str/skill, but unblocked 20-dmg turns kill
+    elif "GiantHead" in mon_ids or "巨口" in mon_ids:
+        # Giant Head: "It's time!" lands on turn 5 for 30-65; after turn 3 we
+        # must race it or wall up (killed the floor-45 Defect run)
+        turn = combat.get("turn") or 0
+        threshold = 3 if turn >= 4 else (4 if turn >= 3 else 5)
     elif "Lagavulin" in mon_ids and incoming > 0:
         threshold = 3  # awake Lagavulin: 18-20 per turn, must block
     elif "BOSS" in (g.get("room_type") or "").upper():
