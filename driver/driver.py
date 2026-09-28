@@ -943,14 +943,25 @@ def combat_action(state, avail_u):
     # only the lethal branch above may ever play it
     attacks = [p for p in attacks if (p[1].get("id") or "") != "Blasphemy"]
 
-    # Watcher: entering Wrath doubles ALL incoming damage. In regular fights
-    # only burst on free turns (enemy not attacking at all) while healthy; in
-    # elite/boss fights the damage race is worth it (a floor-4 Looter bit 20
-    # through a turn-end Wrath).
+    # Watcher: entering Wrath doubles ALL incoming damage, but Wrath burst is
+    # also how the class kills fast (fewer enemy turns = less total damage).
+    # Allow it when we can guarantee the exit: a calm card still affordable
+    # after the wrath card this turn (2d below plays it before turn end).
     if ((g.get("class") or "").upper() == "WATCHER"
             and SHADOW_STANCE[0] != "WRATH"):
-        skip_wrath = ((not big_fight and incoming > 0)
-                      or (hp_frac < 0.55 and incoming >= 12))
+        energy = player.get("energy") or 3
+        def cost_of(c):
+            v = c.get("cost")
+            return v if isinstance(v, int) and v >= 0 else 1
+        cheapest_wrath = min((cost_of(c) for i, c in playable
+                              if (c.get("id") or "") in STANCE_WRATH_CARDS),
+                             default=99)
+        exit_ok = any((c.get("id") or "") in STANCE_CALM_CARDS
+                      and cost_of(c) + cheapest_wrath <= energy
+                      for i, c in playable)
+        kill_speed = mon_hp_max <= sum(estimated_attack(c, player) for _, c in attacks) if attacks else False
+        skip_wrath = ((not big_fight and incoming > 0 and not (exit_ok or kill_speed))
+                      or (hp_frac < 0.55 and incoming >= 12 and not kill_speed))
         if skip_wrath:
             attacks = [p for p in attacks
                        if (p[1].get("id") or "") not in STANCE_WRATH_CARDS]
@@ -997,9 +1008,9 @@ def combat_action(state, avail_u):
 
     # 2d. Watcher: never end a turn in Wrath facing an attack (each hit is
     # doubled); the lethal branch above already ran, so calm-exit whenever a
-    # calm card is playable — even small hits doubled are how runs bleed out
+    # calm card is playable - including attack-type calm cards (Fear No Evil)
     if SHADOW_STANCE[0] == "WRATH" and incoming > 0:
-        calms = [(i, c) for i, c in skills
+        calms = [(i, c) for i, c in playable
                  if (c.get("id") or "") in STANCE_CALM_CARDS]
         if calms:
             log("wrath exit: %d doubled incoming -> calm" % incoming)
