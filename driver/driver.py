@@ -1090,6 +1090,12 @@ def combat_action(state, avail_u):
                 return "PLAY %d 0" % best_aoe[0]
         best = max(attacks, key=lambda p: (estimated_attack(p[1], player), -p[1].get("cost", 0)))
         dmg = estimated_attack(best[1], player)
+        # healers out-heal our damage (Centurion+Healer bled 22hp/fight):
+        # everything goes on the healer while it lives, even through block
+        healers = [(ri, m) for ri, m in mons
+                   if "Healer" in (m.get("id") or "") or "治疗" in (m.get("name") or "")]
+        if healers:
+            return "PLAY %d %d" % (best[0], healers[0][0])
         targets = [(ri, m) for ri, m in mons if (m.get("block") or 0) < dmg]
         pool = targets or mons
         killable = [(ri, m) for ri, m in pool
@@ -1140,6 +1146,11 @@ def card_reward_action(state, avail_u):
                        and (c.get("id") or "") not in BASIC
                        and CARD_DB.get(c.get("id") or "", (0,))[0] >= 8)
     attack_boost = 0.6 if (real_attacks < 4 and len(deck) < 20) else 0.0
+    # act-2 packs (3 Byrds/Cultists bled 20-30hp per fight): draft AoE when
+    # the deck holds almost none - they pay for themselves across every pack
+    aoe_count = sum(1 for c in deck_ids if c in AOE_ATTACKS)
+    aoe_boost = 0.75 if (aoe_count < 2 and (g.get("act") or 1) <= 2
+                         and len(deck) < 22) else 0.0
     # attacks keep a lower bar than the dilution guard: a deck that blocks well
     # but cannot out-damage the boss loses the long fight (3 straight Ironclad
     # boss losses with block-heavy drafts)
@@ -1157,6 +1168,8 @@ def card_reward_action(state, avail_u):
             score -= 0.75  # Awakened One feeds on our Powers (+3 str each)
         if is_atk and attack_boost:
             score += attack_boost
+        if aoe_boost and cid in AOE_ATTACKS:
+            score += aoe_boost
         bar = min(threshold, attack_bar) if is_atk else threshold
         if score > bar and (best_i is None or score > best_score):
             best_i, best_score = i, score
