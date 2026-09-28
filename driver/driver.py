@@ -751,10 +751,18 @@ def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks
                     reason = "kill for %d" % best_kill[0]
                 else:
                     tgt = max(mons, key=lambda rm: monster_intent_damage(rm[1]))
+                    # healers undo chip damage every turn: potions go on them
+                    healers = [rm for rm in mons
+                               if "Healer" in (rm[1].get("id") or "")
+                               or "治疗" in (rm[1].get("name") or "")]
+                    if healers:
+                        tgt = healers[0]
+                        reason = "burst the healer"
                     m_eff = (tgt[1].get("current_hp") or 0) + (tgt[1].get("block") or 0)
                     score = min(d, m_eff) * 0.9 + monster_intent_damage(tgt[1]) * 0.3
                     cmd = "POTION use %d %d" % (pi, tgt[0])
-                    reason = "chip biggest threat"
+                    if "healer" not in reason:
+                        reason = "chip biggest threat"
         elif spec.get("weak"):
             tgt = max(mons, key=lambda rm: monster_intent_damage(rm[1]))
             if not has_power(tgt[1].get("powers"), "Weak") and monster_intent_damage(tgt[1]) >= 8:
