@@ -901,14 +901,16 @@ def combat_action(state, avail_u):
     # only the lethal branch above may ever play it
     attacks = [p for p in attacks if (p[1].get("id") or "") != "Blasphemy"]
 
-    # Watcher: entering Wrath doubles ALL incoming damage. When hurt and facing
-    # a real hit, wrath entries are suicide unless the play kills this turn
-    # (the lethal branch above already handled that case).
+    # Watcher: entering Wrath doubles ALL incoming damage. Regular fights with
+    # real attackers don't pay for that trade (Jaw Worm bit 22 through Wrath):
+    # only enter Wrath when healthy, or in elite/boss fights worth the burst
     if ((g.get("class") or "").upper() == "WATCHER"
-            and SHADOW_STANCE[0] != "WRATH"
-            and hp_frac < 0.55 and incoming >= 12):
-        attacks = [p for p in attacks
-                   if (p[1].get("id") or "") not in STANCE_WRATH_CARDS]
+            and SHADOW_STANCE[0] != "WRATH"):
+        skip_wrath = ((not big_fight and incoming >= 10 and hp_frac < 0.85)
+                      or (hp_frac < 0.55 and incoming >= 12))
+        if skip_wrath:
+            attacks = [p for p in attacks
+                       if (p[1].get("id") or "") not in STANCE_WRATH_CARDS]
 
     # 0b. unified potion valuation (all potions, all contexts)
     if "Sozu" not in relic_id_list(g):
@@ -1466,12 +1468,20 @@ def event_action(state, avail_u):
     ch = [str(c) for c in choices(state)]
     if not ch:
         return "CHOOSE 0"
-    prefer = ("最大生命", "遗物", "金币", "获得", "升级", "回血", "移除", "卡牌")
-    avoid = ("失去", "诅咒", "死亡", "受到伤害")
     g = gs(state)
     hp = g.get("current_hp") or 1
     max_hp = g.get("max_hp") or 1
     hp_frac = hp / float(max_hp) if max_hp else 1.0
+    # Colosseum (大竞技场) forces two back-to-back fights: only enter healthy
+    eid = (str(scr(state).get("event_id")) + str(scr(state).get("event_name"))
+           + str(scr(state).get("body_text"))[:200]).lower()
+    if ("colosseum" in eid or "竞技场" in eid) and hp_frac < 0.7:
+        for i, n in enumerate(ch):
+            if any(k in n for k in ("离开", "跳过", "拒绝", "离开竞技场")):
+                log("event: skipping Colosseum at %d%% hp" % (hp_frac * 100))
+                return "CHOOSE %d" % i
+    prefer = ("最大生命", "遗物", "金币", "获得", "升级", "回血", "移除", "卡牌")
+    avoid = ("失去", "诅咒", "死亡", "受到伤害")
     best, best_score = 0, -99
     for i, n in enumerate(ch):
         score = 0
