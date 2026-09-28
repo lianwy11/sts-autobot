@@ -1415,9 +1415,15 @@ def map_action(state, avail_u):
         if sym == "E":
             if elite_ready:
                 return 2.0  # relic worth it only with a deck that can fight
-            if frac >= 0.60:
+            # hurt + elite = run-ender (died at 20hp into Book of Stabbing):
+            # scale the penalty hard with missing HP
+            if frac >= 0.80:
                 return -2.0
-            return -8.0
+            if frac >= 0.60:
+                return -4.0
+            if frac >= 0.40:
+                return -7.0
+            return -10.0
         if sym == "T":
             return 2.0
         return 0.5
@@ -1430,7 +1436,11 @@ def map_action(state, avail_u):
             child = full.get((k.get("x"), k.get("y")))
             if child is None:
                 continue
-            v = nscore(child.get("symbol")) * (0.85 ** depth) + best_from(child, depth + 1)
+            v = nscore(child.get("symbol"))
+            # bad nodes decay slowly: a path leading into an elite 2-3 layers
+            # out must stay repulsive even when the elite itself is far
+            v = v * ((0.85 ** depth) if v >= 0 else (0.95 ** depth))
+            v += best_from(child, depth + 1)
             if v > best:
                 best = v
         return best
