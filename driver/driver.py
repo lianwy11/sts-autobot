@@ -456,6 +456,14 @@ def boss_syn(card_id, boss):
     boss_l = (boss or "").lower()
     if "donu" in boss_l and card_id in AOE_ATTACKS:
         b += 0.75  # the twin left alive gains Strength; kill both together
+    if "collector" in boss_l and card_id in AOE_ATTACKS:
+        b += 0.75  # it summons two artifacts every 3 turns: sweep them
+    if "automaton" in boss_l and card_id in AOE_ATTACKS:
+        b += 0.75  # bronze automata stack damage each turn they live
+    if "champ" in boss_l:
+        if card_id in ("HeavyBlade", "Heavy Blade", "Uppercut", "Bash",
+                       "Rupture", "DemonForm", "Demon Form", "Inflame"):
+            b += 0.6  # single-target burst beats its mid-fight wall phase
     return b
 
 # Act-boss relic pick after floor 16/33/51: engine relics first, rest-hostile
@@ -1499,6 +1507,8 @@ def map_action(state, avail_u):
                 w -= 1.0  # act-1 attrition: don't feed a hurt deck to packs
             elif frac < 0.7:
                 w -= 0.3
+            if pre_boss and frac < 0.80:
+                w -= 0.6  # arrive at the act boss with HP to spare
             return w
         if sym == "?":
             w = 1.1 if floor < 12 else 0.8
