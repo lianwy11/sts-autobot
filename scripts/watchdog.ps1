@@ -15,7 +15,7 @@ try {
             taskkill /IM javaw.exe /F 2>$null | Out-Null
             taskkill /IM python.exe /F 2>$null | Out-Null
             Start-Sleep -Seconds 3
-            Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','D:\ZCodeWork\sts\launch_sts_bot.ps1' -WindowStyle Hidden
+            Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','D:\ZCodeWork\sts\launch_sts_bot.ps1','-Auto' -WindowStyle Hidden
             Start-Sleep -Seconds 150   # let the relaunch settle before re-arming
         }
     }
