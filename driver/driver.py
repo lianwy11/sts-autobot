@@ -1102,6 +1102,22 @@ def combat_action(state, avail_u):
     # 7. biggest attack, avoid dumping into heavy block; AOE first vs wide boards
     if attacks:
         boss_l = (g.get("act_boss") or "").lower()
+        # Champ's wall phase (below half HP): it keeps 20+ block up and hits
+        # huge - attacking into the wall wastes energy, so we turtle instead
+        if "champ" in boss_l:
+            champ = max(mons, key=lambda rm: (rm[1].get("current_hp") or 0))
+            if (champ[1].get("block") or 0) >= 10:
+                blk_cards = [(i, c, estimated_block(c, player)) for i, c in skills
+                             if estimated_block(c, player) >= 5]
+                if blk_cards:
+                    blk_cards.sort(key=lambda t: -t[2])
+                    log("champ wall: block>=10 -> turtle")
+                    return play_card(blk_cards[0][0], blk_cards[0][1])
+                powers_ok = [(i, c) for i, c in powers
+                             if (c.get("id") or "") not in ("Barricade",)]
+                if powers_ok:
+                    return play_card(powers_ok[0][0], powers_ok[0][1])
+                return "END"
         if "slime boss" in boss_l and len(mons) >= 2:
             aoe = [p for p in attacks if (p[1].get("id") or "") in BOSS_AOE]
             if aoe:
