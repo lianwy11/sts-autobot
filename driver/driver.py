@@ -636,6 +636,10 @@ def is_elite_or_boss(g):
     room = (g.get("room_type") or "").upper()
     return "ELITE" in room or "BOSS" in room
 
+def boss_floor_hint(g):
+    """The act boss's floor (16/33/51) from the current act."""
+    return {1: 16, 2: 33, 3: 51}.get(g.get("act") or 1, 16)
+
 def living_monsters(state):
     """True if the reported combat still has living enemies (the reliable
     'fight is live' signal; room_phase/action_phase can lag behind)."""
@@ -880,6 +884,13 @@ def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks
                 score = 6
                 reason = "reroll empty slots"
         if score > 0:
+            # pre-boss normal fights: bottle combat potions for the boss (a
+            # fire potion there is a full turn of damage). Heals stay live.
+            if ((g.get("floor") or 0) >= boss_floor_hint(g) - 4
+                    and "BOSS" not in room_u and not is_elite_or_boss(g)
+                    and not (spec.get("heal") or spec.get("heal_pct")
+                             or spec.get("escape"))):
+                score *= 0.15
             cands.append((score, cmd, reason))
 
     if not cands:
@@ -889,8 +900,6 @@ def potion_decision(state, g, player, mons, incoming, residual, hp_frac, attacks
     bar = 6 if easy_fight else (2 if "BOSS" in room_u else (3 if is_elite_or_boss(g) else 5))
     if hp_frac <= 0.3:
         bar = 0  # about to die: any potion that helps, now
-    if (g.get("floor") or 0) >= 13 and "BOSS" not in room_u and not is_elite_or_boss(g):
-        bar += 1  # pre-boss floors: mild hoarding for the act boss
     if score >= bar:
         log("potion: %s (value %.0f, bar %d)" % (reason, score, bar))
         return cmd
@@ -1427,8 +1436,8 @@ def rest_action(state, avail_u):
     boss_floor = {1: 16, 2: 33, 3: 51}.get(act, 16)
     if floor >= boss_floor - 3 and frac < 0.85:
         rest_v += 0.20  # bring HP into the boss fight
-    if floor >= boss_floor - 4 and frac < 0.70:
-        rest_v += 0.50  # entering the boss under 70% is how runs die
+    if floor >= boss_floor - 4 and frac < 0.80:
+        rest_v += 0.50  # entering the boss below 80% is how runs die
     relic_ids = [r.get("id") for r in (g.get("relics") or [])]
     if set(relic_ids) & REGEN_RELICS:
         rest_v -= 0.08  # sustain relics heal through combats
